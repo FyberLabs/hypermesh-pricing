@@ -129,7 +129,7 @@ ghcr.io/fyberlabs/hypermesh-pricing@sha256:<digest>
 
 The tag can be moved. The digest cannot. There is no deploy job in this repository. Panopticon pulls the pinned image and runs it.
 
-A new GHCR package is private until its visibility is set. The release workflow sets this package to public, matching the repository, so a compose host can pull the digest without a registry login. The image does not contain `PRICING_SERVICE_TOKEN`.
+A new GHCR package is private until its visibility is set. The release job tries to mark it public and continues if that call fails. `GITHUB_TOKEN` usually cannot change org package visibility. The one-time fix is to set the package public in the organization package settings, or link the package to this repository. The image does not contain `PRICING_SERVICE_TOKEN`.
 
 ## Run
 

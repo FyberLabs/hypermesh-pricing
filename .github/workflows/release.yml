@@ -67,32 +67,32 @@ jobs:
             fi
             ref="${image}@${digest}"
           fi
+          echo "Pin the running image by that digest. The tag can move; the digest cannot."
           echo "image digest: ${ref}"
           if [ -n "${GITHUB_STEP_SUMMARY:-}" ]; then
             printf '%s\n' "image digest: ${ref}" >> "${GITHUB_STEP_SUMMARY}"
           fi
-          echo "Pin the running image by that digest. The tag can move; the digest cannot."
       - name: Set package visibility to public
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           set -euo pipefail
+          # GITHUB_TOKEN usually cannot PATCH org package visibility. A miss
+          # must not fail the release: the image is already pushed. Do not
+          # write the step summary here; the digest line above stays last.
           path="/orgs/${GITHUB_REPOSITORY_OWNER}/packages/container/hypermesh-pricing"
-          for attempt in 1 2 3 4 5 6; do
-            set +e
-            body="$(gh api --method PATCH \
-              -H "Accept: application/vnd.github+json" \
-              "$path" \
-              -f visibility=public 2>&1)"
-            status=$?
-            set -e
-            if [ "$status" -eq 0 ]; then
-              echo "package visibility: public"
-              exit 0
-            fi
-            echo "visibility attempt ${attempt} failed" >&2
-            printf '%s\n' "$body" >&2
-            sleep 5
-          done
-          echo "could not set the package visibility to public" >&2
-          exit 1
+          set +e
+          body="$(gh api --method PATCH \
+            -H "Accept: application/vnd.github+json" \
+            "$path" \
+            -f visibility=public 2>&1)"
+          status=$?
+          set -e
+          if [ "$status" -eq 0 ]; then
+            echo "package visibility: public"
+            exit 0
+          fi
+          echo "WARNING: could not set the GHCR package visibility to public. The image was already pushed." >&2
+          echo "WARNING: one-time fix: set the package public in the org package settings, or link it to the repo." >&2
+          printf '%s\n' "$body" >&2
+          exit 0
