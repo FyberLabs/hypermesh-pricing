@@ -1,0 +1,1346 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "Hypermesh pricing",
+    "description": "Stateless pricing engine. Tuning values in the published ruleset are simulated defaults from the private market-sim reference, not measured prices. The platform fee is a per-request take; the ruleset does not set one. GET /v1/rulesets/active is the customer-facing rules card: show public_summary and parameters marked customer_visible.",
+    "version": "0.1.0"
+  },
+  "paths": {
+    "/healthz": {
+      "get": {
+        "summary": "Healthz",
+        "operationId": "healthz_healthz_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HealthOut"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/rulesets": {
+      "get": {
+        "summary": "Rulesets",
+        "operationId": "rulesets_v1_rulesets_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RulesetListOut"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ]
+      }
+    },
+    "/v1/rulesets/active": {
+      "get": {
+        "summary": "Ruleset Active",
+        "operationId": "ruleset_active_v1_rulesets_active_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RulesetDetailOut"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ]
+      }
+    },
+    "/v1/rulesets/{version}": {
+      "get": {
+        "summary": "Ruleset By Version",
+        "operationId": "ruleset_by_version_v1_rulesets__version__get",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "version",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Version"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RulesetDetailOut"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/floors": {
+      "post": {
+        "summary": "Floors",
+        "operationId": "floors_v1_floors_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/FloorIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FloorOut"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ]
+      }
+    },
+    "/v1/rounds/realtime": {
+      "post": {
+        "summary": "Realtime",
+        "operationId": "realtime_v1_rounds_realtime_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RoundIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RoundOut"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ]
+      }
+    },
+    "/v1/rounds/day-ahead": {
+      "post": {
+        "summary": "Day Ahead",
+        "operationId": "day_ahead_v1_rounds_day_ahead_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RoundIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RoundOut"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ]
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "BoostIn": {
+        "properties": {
+          "applied": {
+            "type": "string",
+            "title": "Applied",
+            "default": "1.3"
+          },
+          "direction": {
+            "type": "integer",
+            "enum": [
+              -1,
+              0,
+              1
+            ],
+            "title": "Direction",
+            "default": 0
+          },
+          "prev_trail": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Prev Trail"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "title": "BoostIn"
+      },
+      "BoostOut": {
+        "properties": {
+          "applied": {
+            "type": "string",
+            "title": "Applied"
+          },
+          "direction": {
+            "type": "integer",
+            "title": "Direction"
+          },
+          "prev_trail": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Prev Trail"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "applied",
+          "direction"
+        ],
+        "title": "BoostOut"
+      },
+      "ChangelogOut": {
+        "properties": {
+          "previous_version": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Previous Version"
+          },
+          "summary": {
+            "type": "string",
+            "title": "Summary"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "previous_version",
+          "summary"
+        ],
+        "title": "ChangelogOut"
+      },
+      "FillOut": {
+        "properties": {
+          "order_id": {
+            "type": "string",
+            "title": "Order Id"
+          },
+          "org_id": {
+            "type": "string",
+            "title": "Org Id"
+          },
+          "pool_id": {
+            "type": "string",
+            "title": "Pool Id"
+          },
+          "rung_index": {
+            "type": "integer",
+            "title": "Rung Index"
+          },
+          "hours": {
+            "type": "string",
+            "title": "Hours"
+          },
+          "pay_cents": {
+            "type": "integer",
+            "title": "Pay Cents"
+          },
+          "tip_cents": {
+            "type": "integer",
+            "title": "Tip Cents"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "order_id",
+          "org_id",
+          "pool_id",
+          "rung_index",
+          "hours",
+          "pay_cents",
+          "tip_cents"
+        ],
+        "title": "FillOut"
+      },
+      "FloorIn": {
+        "properties": {
+          "ruleset_version": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Ruleset Version"
+          },
+          "loaded_kw": {
+            "type": "string",
+            "title": "Loaded Kw"
+          },
+          "tariff_per_kwh": {
+            "type": "string",
+            "title": "Tariff Per Kwh"
+          },
+          "overhead": {
+            "type": "string",
+            "title": "Overhead"
+          },
+          "capex": {
+            "type": "string",
+            "title": "Capex"
+          },
+          "residual": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Residual"
+          },
+          "u": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "U"
+          },
+          "host_margin": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Host Margin"
+          },
+          "take": {
+            "type": "string",
+            "title": "Take"
+          },
+          "boost": {
+            "type": "string",
+            "title": "Boost"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "loaded_kw",
+          "tariff_per_kwh",
+          "overhead",
+          "capex",
+          "take",
+          "boost"
+        ],
+        "title": "FloorIn"
+      },
+      "FloorOut": {
+        "properties": {
+          "engine_version": {
+            "type": "string",
+            "title": "Engine Version"
+          },
+          "ruleset_version": {
+            "type": "string",
+            "title": "Ruleset Version"
+          },
+          "floor_cents": {
+            "type": "integer",
+            "title": "Floor Cents"
+          },
+          "reserve_cents": {
+            "type": "integer",
+            "title": "Reserve Cents"
+          },
+          "floor_usd": {
+            "type": "string",
+            "title": "Floor Usd"
+          },
+          "reserve_usd": {
+            "type": "string",
+            "title": "Reserve Usd"
+          },
+          "u_used": {
+            "type": "string",
+            "title": "U Used"
+          },
+          "boost_used": {
+            "type": "string",
+            "title": "Boost Used"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "engine_version",
+          "ruleset_version",
+          "floor_cents",
+          "reserve_cents",
+          "floor_usd",
+          "reserve_usd",
+          "u_used",
+          "boost_used"
+        ],
+        "title": "FloorOut"
+      },
+      "HTTPValidationError": {
+        "properties": {
+          "detail": {
+            "items": {
+              "$ref": "#/components/schemas/ValidationError"
+            },
+            "type": "array",
+            "title": "Detail"
+          }
+        },
+        "type": "object",
+        "title": "HTTPValidationError"
+      },
+      "HealthOut": {
+        "properties": {
+          "status": {
+            "type": "string",
+            "title": "Status"
+          },
+          "engine_version": {
+            "type": "string",
+            "title": "Engine Version"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "status",
+          "engine_version"
+        ],
+        "title": "HealthOut"
+      },
+      "OrderIn": {
+        "properties": {
+          "order_id": {
+            "type": "string",
+            "title": "Order Id"
+          },
+          "org_id": {
+            "type": "string",
+            "title": "Org Id"
+          },
+          "lottery": {
+            "type": "integer",
+            "minimum": 0.0,
+            "title": "Lottery",
+            "default": 0
+          },
+          "tip_cents": {
+            "type": "integer",
+            "minimum": 0.0,
+            "title": "Tip Cents",
+            "default": 0
+          },
+          "hours": {
+            "type": "string",
+            "title": "Hours"
+          },
+          "tier_rank": {
+            "type": "integer",
+            "title": "Tier Rank",
+            "default": 0
+          },
+          "rungs": {
+            "items": {
+              "$ref": "#/components/schemas/RungIn"
+            },
+            "type": "array",
+            "minItems": 1,
+            "title": "Rungs"
+          },
+          "pain": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/PainIn"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "order_id",
+          "org_id",
+          "hours",
+          "rungs"
+        ],
+        "title": "OrderIn"
+      },
+      "PainIn": {
+        "properties": {
+          "fallen_back": {
+            "additionalProperties": {
+              "type": "boolean"
+            },
+            "type": "object",
+            "title": "Fallen Back"
+          },
+          "confirmed": {
+            "type": "boolean",
+            "title": "Confirmed",
+            "default": false
+          },
+          "notify_count": {
+            "type": "integer",
+            "minimum": 0.0,
+            "title": "Notify Count",
+            "default": 0
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "title": "PainIn"
+      },
+      "ParameterOut": {
+        "properties": {
+          "path": {
+            "type": "string",
+            "title": "Path"
+          },
+          "value": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "integer"
+              },
+              {
+                "type": "boolean"
+              }
+            ],
+            "title": "Value"
+          },
+          "customer_visible": {
+            "type": "boolean",
+            "title": "Customer Visible",
+            "description": "True when a renter or host dashboard may render this parameter."
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "path",
+          "value",
+          "customer_visible"
+        ],
+        "title": "ParameterOut"
+      },
+      "PoolIn": {
+        "properties": {
+          "pool_id": {
+            "type": "string",
+            "title": "Pool Id"
+          },
+          "class_id": {
+            "type": "string",
+            "title": "Class Id"
+          },
+          "region": {
+            "type": "string",
+            "title": "Region"
+          },
+          "supply_hours": {
+            "type": "string",
+            "title": "Supply Hours"
+          },
+          "n_hosts": {
+            "type": "integer",
+            "minimum": 0.0,
+            "title": "N Hosts"
+          },
+          "reserve_cents": {
+            "type": "integer",
+            "minimum": 0.0,
+            "title": "Reserve Cents"
+          },
+          "prev_base_cents": {
+            "type": "integer",
+            "minimum": 0.0,
+            "title": "Prev Base Cents"
+          },
+          "trailing_util_24h": {
+            "type": "string",
+            "title": "Trailing Util 24H"
+          },
+          "day_ahead_median_7d_cents": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "minimum": 0.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Day Ahead Median 7D Cents"
+          },
+          "offered_hours": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Offered Hours"
+          },
+          "floor_cents": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "minimum": 0.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Floor Cents"
+          },
+          "floor_usd": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Floor Usd"
+          },
+          "take": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Take"
+          },
+          "ema_cents": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "minimum": 0.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Ema Cents"
+          },
+          "boost": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/BoostIn"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "pool_id",
+          "class_id",
+          "region",
+          "supply_hours",
+          "n_hosts",
+          "reserve_cents",
+          "prev_base_cents",
+          "trailing_util_24h"
+        ],
+        "title": "PoolIn"
+      },
+      "PoolOut": {
+        "properties": {
+          "pool_id": {
+            "type": "string",
+            "title": "Pool Id"
+          },
+          "class_id": {
+            "type": "string",
+            "title": "Class Id"
+          },
+          "region": {
+            "type": "string",
+            "title": "Region"
+          },
+          "base_cents": {
+            "type": "integer",
+            "title": "Base Cents"
+          },
+          "next_base_cents": {
+            "type": "integer",
+            "title": "Next Base Cents"
+          },
+          "reserve_cents": {
+            "type": "integer",
+            "title": "Reserve Cents"
+          },
+          "cap_cents": {
+            "type": "integer",
+            "title": "Cap Cents"
+          },
+          "utilization": {
+            "type": "string",
+            "title": "Utilization"
+          },
+          "scarce": {
+            "type": "boolean",
+            "title": "Scarce"
+          },
+          "org_cap_applied": {
+            "type": "boolean",
+            "title": "Org Cap Applied",
+            "description": "The 25% scarce-pool org cap bound at least one org."
+          },
+          "rationed": {
+            "type": "boolean",
+            "title": "Rationed"
+          },
+          "boost_active": {
+            "type": "boolean",
+            "title": "Boost Active",
+            "description": "The floor boost multiple in force is above 1."
+          },
+          "boost_multiple": {
+            "type": "string",
+            "title": "Boost Multiple",
+            "description": "Current floor-boost multiple. Safe to show customers."
+          },
+          "at_cap": {
+            "type": "boolean",
+            "title": "At Cap",
+            "description": "The live price is at or above the spike cap."
+          },
+          "at_floor": {
+            "type": "boolean",
+            "title": "At Floor",
+            "description": "The live price is at the floor-based reserve, the minimum price."
+          },
+          "degraded": {
+            "type": "boolean",
+            "title": "Degraded",
+            "description": "True only on a local fallback round. A live service response is false."
+          },
+          "ruleset_version": {
+            "type": "string",
+            "title": "Ruleset Version",
+            "description": "Ruleset that priced this pool. Stamp it on the receipt."
+          },
+          "demand_hours": {
+            "type": "string",
+            "title": "Demand Hours"
+          },
+          "supply_hours": {
+            "type": "string",
+            "title": "Supply Hours"
+          },
+          "supply_clamped": {
+            "type": "boolean",
+            "title": "Supply Clamped"
+          },
+          "reserve_source": {
+            "type": "string",
+            "title": "Reserve Source"
+          },
+          "boost": {
+            "$ref": "#/components/schemas/BoostOut"
+          },
+          "next_ema_cents": {
+            "type": "integer",
+            "title": "Next Ema Cents"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "pool_id",
+          "class_id",
+          "region",
+          "base_cents",
+          "next_base_cents",
+          "reserve_cents",
+          "cap_cents",
+          "utilization",
+          "scarce",
+          "org_cap_applied",
+          "rationed",
+          "boost_active",
+          "boost_multiple",
+          "at_cap",
+          "at_floor",
+          "degraded",
+          "ruleset_version",
+          "demand_hours",
+          "supply_hours",
+          "supply_clamped",
+          "reserve_source",
+          "boost",
+          "next_ema_cents"
+        ],
+        "title": "PoolOut"
+      },
+      "RoundIn": {
+        "properties": {
+          "round_id": {
+            "type": "string",
+            "title": "Round Id"
+          },
+          "round_start": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Round Start"
+          },
+          "ruleset_version": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Ruleset Version"
+          },
+          "pools": {
+            "items": {
+              "$ref": "#/components/schemas/PoolIn"
+            },
+            "type": "array",
+            "minItems": 1,
+            "title": "Pools"
+          },
+          "orders": {
+            "items": {
+              "$ref": "#/components/schemas/OrderIn"
+            },
+            "type": "array",
+            "title": "Orders"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "round_id",
+          "pools",
+          "orders"
+        ],
+        "title": "RoundIn"
+      },
+      "RoundOut": {
+        "properties": {
+          "engine_version": {
+            "type": "string",
+            "title": "Engine Version"
+          },
+          "ruleset_version": {
+            "type": "string",
+            "title": "Ruleset Version"
+          },
+          "round_id": {
+            "type": "string",
+            "title": "Round Id"
+          },
+          "round_start": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Round Start"
+          },
+          "passes": {
+            "type": "integer",
+            "title": "Passes"
+          },
+          "hit_iteration_cap": {
+            "type": "boolean",
+            "title": "Hit Iteration Cap"
+          },
+          "pools": {
+            "items": {
+              "$ref": "#/components/schemas/PoolOut"
+            },
+            "type": "array",
+            "title": "Pools"
+          },
+          "fills": {
+            "items": {
+              "$ref": "#/components/schemas/FillOut"
+            },
+            "type": "array",
+            "title": "Fills"
+          },
+          "unfilled": {
+            "items": {
+              "$ref": "#/components/schemas/UnfilledOut"
+            },
+            "type": "array",
+            "title": "Unfilled"
+          },
+          "pain_by_order": {
+            "additionalProperties": {
+              "$ref": "#/components/schemas/PainIn"
+            },
+            "type": "object",
+            "title": "Pain By Order"
+          },
+          "upgrade_applied": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Upgrade Applied"
+          },
+          "upgrade_gains": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Upgrade Gains"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "engine_version",
+          "ruleset_version",
+          "round_id",
+          "passes",
+          "hit_iteration_cap",
+          "pools",
+          "fills",
+          "unfilled",
+          "pain_by_order"
+        ],
+        "title": "RoundOut"
+      },
+      "RulesetDetailOut": {
+        "properties": {
+          "engine_version": {
+            "type": "string",
+            "title": "Engine Version"
+          },
+          "version": {
+            "type": "string",
+            "title": "Version"
+          },
+          "sha256": {
+            "type": "string",
+            "title": "Sha256",
+            "description": "Integrity hash. customer_visible.sha256 is false."
+          },
+          "active": {
+            "type": "boolean",
+            "title": "Active"
+          },
+          "effective_from": {
+            "type": "string",
+            "title": "Effective From"
+          },
+          "changelog": {
+            "$ref": "#/components/schemas/ChangelogOut"
+          },
+          "public_summary": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Public Summary"
+          },
+          "customer_visible": {
+            "additionalProperties": {
+              "type": "boolean"
+            },
+            "type": "object",
+            "title": "Customer Visible"
+          },
+          "parameters": {
+            "items": {
+              "$ref": "#/components/schemas/ParameterOut"
+            },
+            "type": "array",
+            "title": "Parameters"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "engine_version",
+          "version",
+          "sha256",
+          "active",
+          "effective_from",
+          "changelog",
+          "public_summary",
+          "customer_visible",
+          "parameters"
+        ],
+        "title": "RulesetDetailOut"
+      },
+      "RulesetEntry": {
+        "properties": {
+          "version": {
+            "type": "string",
+            "title": "Version"
+          },
+          "sha256": {
+            "type": "string",
+            "title": "Sha256"
+          },
+          "source": {
+            "type": "string",
+            "title": "Source"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "version",
+          "sha256",
+          "source"
+        ],
+        "title": "RulesetEntry"
+      },
+      "RulesetListOut": {
+        "properties": {
+          "engine_version": {
+            "type": "string",
+            "title": "Engine Version"
+          },
+          "default": {
+            "type": "string",
+            "title": "Default"
+          },
+          "rulesets": {
+            "items": {
+              "$ref": "#/components/schemas/RulesetEntry"
+            },
+            "type": "array",
+            "title": "Rulesets"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "engine_version",
+          "default",
+          "rulesets"
+        ],
+        "title": "RulesetListOut"
+      },
+      "RungIn": {
+        "properties": {
+          "pool_id": {
+            "type": "string",
+            "title": "Pool Id"
+          },
+          "max_cents": {
+            "type": "integer",
+            "minimum": 0.0,
+            "title": "Max Cents"
+          },
+          "willingness_cents": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "minimum": 0.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Willingness Cents"
+          },
+          "notify_cents": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "minimum": 0.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Notify Cents"
+          },
+          "confirm_cents": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "minimum": 0.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Confirm Cents"
+          },
+          "auto_fallback_cents": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "minimum": 0.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Auto Fallback Cents"
+          },
+          "stop_cents": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "minimum": 0.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Stop Cents"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "pool_id",
+          "max_cents"
+        ],
+        "title": "RungIn"
+      },
+      "UnfilledOut": {
+        "properties": {
+          "order_id": {
+            "type": "string",
+            "title": "Order Id"
+          },
+          "org_id": {
+            "type": "string",
+            "title": "Org Id"
+          },
+          "hours": {
+            "type": "string",
+            "title": "Hours"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "order_id",
+          "org_id",
+          "hours"
+        ],
+        "title": "UnfilledOut"
+      },
+      "ValidationError": {
+        "properties": {
+          "loc": {
+            "items": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "integer"
+                }
+              ]
+            },
+            "type": "array",
+            "title": "Location"
+          },
+          "msg": {
+            "type": "string",
+            "title": "Message"
+          },
+          "type": {
+            "type": "string",
+            "title": "Error Type"
+          },
+          "input": {
+            "title": "Input"
+          },
+          "ctx": {
+            "type": "object",
+            "title": "Context"
+          }
+        },
+        "type": "object",
+        "required": [
+          "loc",
+          "msg",
+          "type"
+        ],
+        "title": "ValidationError"
+      }
+    },
+    "securitySchemes": {
+      "HTTPBearer": {
+        "type": "http",
+        "description": "Internal service token from the PRICING_SERVICE_TOKEN environment variable.",
+        "scheme": "bearer"
+      }
+    }
+  }
+}

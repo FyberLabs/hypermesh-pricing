@@ -1,0 +1,62 @@
+{
+  "version": "2026-09-25.1",
+  "source": "Simulated defaults from the private market-sim reference (seed 5547) and the 2026-09-25 pricing memos. Not measured prices, utilization, or revenue. The platform fee (take) is not set here.",
+  "effective_from": "2026-09-25T00:00:00Z",
+  "changelog": {
+    "previous_version": null,
+    "summary": "Initial published ruleset. No previous version."
+  },
+  "floor": {
+    "depreciation_years": 3,
+    "hours_per_year": 8760,
+    "u_min": "0.30",
+    "u_max": "0.70",
+    "u_default": "0.50",
+    "residual_default": "0"
+  },
+  "boost": {
+    "mode": "conditional",
+    "b_max": "1.3",
+    "u_low": "0.35",
+    "u_high": "0.55",
+    "hysteresis": "0.03",
+    "smooth": "0.25",
+    "window_hours": 24,
+    "min_hosts": 3,
+    "thin_plateau": true
+  },
+  "controller": {
+    "delta": "0.025",
+    "target_util": "0.70",
+    "kappa": "3",
+    "lambda": "1.5",
+    "round_minutes": 15
+  },
+  "market": {
+    "tip_cap": "0.10",
+    "share_cap": "0.25",
+    "day_ahead_share_max": "0.75",
+    "max_passes": 50,
+    "pain_hysteresis": "0.05",
+    "smoothing_alpha": "0.30",
+    "day_ahead_upgrade": true
+  },
+  "public": {
+    "lines": [
+      "Prices move at most 2.5% per 15 minutes",
+      "Prices step toward the pool being 70% busy",
+      "Spike cap: 3x the floor-based reserve",
+      "When the recent day-ahead price is higher, the cap is 1.5x that price",
+      "Priority tip capped at 10% of the live price",
+      "New or quiet pools get up to a 1.3x floor boost that fades as the pool reaches 55% busy",
+      "The full boost holds while the pool is at or below 35% busy",
+      "The quiet-pool boost uses the last 24 hours of real-time use",
+      "No org may take more than 25% of a scarce pool",
+      "At most 75% of offered hours are sold a day ahead",
+      "A pool with fewer than 3 hosts is priced at its reserve",
+      "Hardware cost in the floor is spread over 3 years, assuming the machine is busy between 30% and 70% of the time",
+      "When utilization is not supplied, the floor assumes 50% busy",
+      "A day-ahead award can move up to a higher choice when the cleared price allows it"
+    ]
+  }
+}
