@@ -90,6 +90,19 @@ def dec_str(value: Decimal, places: str = "0.00000001") -> str:
     return text or "0"
 
 
+def scale_cents(rate_cents: int, hours: Decimal) -> int:
+    """``rate_cents × hours``, half-even to an integer cent.
+
+    A whole number of hours is exact. ``pay_cents`` and ``tip_cents`` are
+    per box-hour; this is how a fill becomes a total.
+    """
+    if isinstance(rate_cents, bool) or not isinstance(rate_cents, int):
+        raise TypeError("rate_cents must be an int")
+    if rate_cents < 0 or hours < 0:
+        raise ValueError("rate and hours must be non-negative")
+    return int((Decimal(rate_cents) * hours).to_integral_value(rounding=ROUND_HALF_EVEN))
+
+
 def clamp_int(value: int, lo: int, hi: int) -> int:
     if hi < lo:
         return lo

@@ -13,7 +13,7 @@ from pricing_core.ruleset import RulesetError, load_ruleset, ruleset_dir, valida
 # Frozen bytes of rulesets/2026-09-25.1.json. A tuning change is a new version
 # file, not an edit of this one.
 PINNED_SHA256 = "521295aad5ba0891b57a09c6c43572c43e938c7ea5d34674c4fc598b22158066"
-ROOT = Path(__file__).resolve().parents[1]
+PINNED_SHA256_V2 = "a207974a53b439ce7d495892e3c8666659bd1c204989c218f9873a2605573d0e"
 
 
 def test_published_ruleset_bytes_are_frozen():
@@ -48,8 +48,8 @@ def test_published_ruleset_has_no_platform_fee_and_is_labeled_simulated():
 
 
 def test_schema_file_matches_the_checker():
-    schema = json.loads((ROOT / "rulesets" / "schema.json").read_text(encoding="utf-8"))
-    raw = json.loads((ROOT / "rulesets" / "2026-09-25.1.json").read_text(encoding="utf-8"))
+    schema = json.loads((ruleset_dir() / "schema.json").read_text(encoding="utf-8"))
+    raw = json.loads((ruleset_dir() / "2026-09-25.1.json").read_text(encoding="utf-8"))
     validate_ruleset(raw)
     assert set(schema["required"]) <= set(raw)
     for section in ("floor", "boost", "controller", "market"):
@@ -57,7 +57,7 @@ def test_schema_file_matches_the_checker():
 
 
 def test_schema_rejects_a_baked_in_take_and_a_missing_knob():
-    raw = json.loads((ROOT / "rulesets" / "2026-09-25.1.json").read_text(encoding="utf-8"))
+    raw = json.loads((ruleset_dir() / "2026-09-25.1.json").read_text(encoding="utf-8"))
     baked = json.loads(json.dumps(raw))
     baked["market"]["take"] = "0.08"
     with pytest.raises(RulesetError, match="platform fee"):
@@ -66,6 +66,22 @@ def test_schema_rejects_a_baked_in_take_and_a_missing_knob():
     del missing["controller"]["lambda"]
     with pytest.raises(RulesetError, match="lambda"):
         validate_ruleset(missing)
+
+
+def test_lock_ruleset_is_a_new_file_and_does_not_edit_the_first():
+    first = ruleset_dir() / "2026-09-25.1.json"
+    assert hashlib.sha256(first.read_bytes()).hexdigest() == PINNED_SHA256
+    path = ruleset_dir() / "2026-09-25.2.json"
+    digest = hashlib.sha256(path.read_bytes()).hexdigest()
+    sidecar = (path.parent / f"{path.name}.sha256").read_text(encoding="utf-8").strip()
+    assert digest == PINNED_SHA256_V2
+    assert sidecar == PINNED_SHA256_V2
+    loaded = load_ruleset("2026-09-25.2")
+    assert loaded.sha256 == PINNED_SHA256_V2
+    assert loaded.market["lock_hours_max"] == 24
+    assert loaded.raw["changelog"]["previous_version"] == "2026-09-25.1"
+    assert "A real-time fill locks its price for up to 24 hours" in loaded.raw["public"]["lines"]
+    assert "lock_hours_max" not in json.loads(first.read_text(encoding="utf-8"))["market"]
 
 
 def test_unknown_ruleset_version_is_rejected(tmp_path: Path):

@@ -429,11 +429,18 @@ def _finish_realtime(
     for chunk in placed:
         pool = pools[chunk.pool_id]
         scarce = demand.get(chunk.pool_id, Decimal(0)) > pool.supply + EPS
-        tip = capped_tip_cents(chunk.tip_cents, pool.base_cents, tip_cap) if scarce else 0
-        pay = min(chunk.max_cents, pool.base_cents + tip) if scarce else pool.base_cents
-        pay = max(pay, pool.reserve_cents)
-        if pay > chunk.max_cents:
+        # pay_cents is the per-box-hour box price and does not include the
+        # priority tip. tip_cents is the per-box-hour tip actually charged:
+        # zero unless the pool is scarce, capped at the ruleset fraction of
+        # the base, and clipped so pay + tip never exceeds the renter's max.
+        pay = pool.base_cents
+        if pay < pool.reserve_cents or pay > chunk.max_cents:
             continue
+        if scarce:
+            tip = capped_tip_cents(chunk.tip_cents, pool.base_cents, tip_cap)
+            tip = min(tip, chunk.max_cents - pay)
+        else:
+            tip = 0
         fills.append(
             Fill(
                 order_id=chunk.order_id,

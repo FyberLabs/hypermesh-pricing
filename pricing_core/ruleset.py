@@ -20,7 +20,7 @@ from pricing_core.money import D, parse_decimal
 from pricing_core.transparency import choose_active, customer_visible, known_parameter_paths, public_lines
 
 # Bump only by shipping a new file. Tests pin the bytes of each published name.
-PUBLISHED_VERSIONS = ("2026-09-25.1",)
+PUBLISHED_VERSIONS = ("2026-09-25.1", "2026-09-25.2")
 
 
 class RulesetError(ValueError):
@@ -54,20 +54,26 @@ class Ruleset:
         return D(self.raw[section][key])
 
 
+def packaged_ruleset_dir() -> Path:
+    """Rulesets shipped inside the installed package."""
+    return Path(__file__).resolve().parent / "rulesets"
+
+
 def ruleset_dir() -> Path:
+    """Directory of published ruleset files.
+
+    ``PRICING_RULESET_DIR`` overrides the copy packaged in ``pricing_core``.
+    A pip or git install finds the packaged files with the variable unset.
+    """
     override = os.environ.get("PRICING_RULESET_DIR")
     if override:
         path = Path(override)
         if not path.is_dir():
             raise RulesetError(f"PRICING_RULESET_DIR is not a directory: {path}")
         return path
-    candidates = [
-        Path.cwd() / "rulesets",
-        Path(__file__).resolve().parents[1] / "rulesets",
-    ]
-    for candidate in candidates:
-        if candidate.is_dir():
-            return candidate
+    packaged = packaged_ruleset_dir()
+    if packaged.is_dir():
+        return packaged
     raise RulesetError("rulesets directory not found")
 
 
@@ -259,6 +265,8 @@ def validate_ruleset(raw: object) -> None:
         raise RulesetError("market.smoothing_alpha must be in (0, 1]")
     if not isinstance(market["day_ahead_upgrade"], bool):
         raise RulesetError("market.day_ahead_upgrade must be a boolean")
+    if "lock_hours_max" in market:
+        _positive_int(market["lock_hours_max"], "market.lock_hours_max")
     _check_transparency(raw)
 
 

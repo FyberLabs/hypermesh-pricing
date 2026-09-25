@@ -117,7 +117,7 @@ def test_engine_realtime_matches_the_fixture_and_is_deterministic():
     for expected in body["expected_fills"]:
         got = pays[expected["order_id"]]
         assert got["pool_id"] == expected["pool_id"]
-        _near(got["pay_cents"], expected["pay"])
+        _near(got["pay_cents"] + got["tip_cents"], expected["pay"])
     reversed_request = {
         **request,
         "pools": list(reversed(request["pools"])),
@@ -225,7 +225,7 @@ def _assert_fills(core_fills, expected: list[dict]) -> None:
     assert set(core) == set(golden)
     for key, want in golden.items():
         got = core[key]
-        _near(got.pay_cents, want["pay"])
+        _near(got.pay_cents + got.tip_cents, want["pay"])
         assert abs(float(got.hours) - float(want["hours"])) <= 1e-9
         assert got.rung_index == want["rung_index"]
 

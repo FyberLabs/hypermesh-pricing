@@ -2,8 +2,8 @@
   "openapi": "3.1.0",
   "info": {
     "title": "Hypermesh pricing",
-    "description": "Stateless pricing engine. Tuning values in the published ruleset are simulated defaults from the private market-sim reference, not measured prices. The platform fee is a per-request take; the ruleset does not set one. GET /v1/rulesets/active is the customer-facing rules card: show public_summary and parameters marked customer_visible.",
-    "version": "0.1.0"
+    "description": "Stateless pricing engine. Tuning values in the published ruleset are simulated defaults from the private market-sim reference, not measured prices. The platform fee is a per-request take; the ruleset does not set one. GET /v1/rulesets/active is the customer-facing rules card: show public_summary and the parameters returned there. Those GET routes are unauthenticated and return customer-safe fields only. Panopticon should still proxy them through its public edge. A canonical pool id is <class_id>@<region>, with region default while there are no regions. Pin the container by digest: ghcr.io/fyberlabs/hypermesh-pricing@sha256:<digest>.",
+    "version": "0.1.1"
   },
   "paths": {
     "/healthz": {
@@ -39,12 +39,7 @@
               }
             }
           }
-        },
-        "security": [
-          {
-            "HTTPBearer": []
-          }
-        ]
+        }
       }
     },
     "/v1/rulesets/active": {
@@ -62,23 +57,13 @@
               }
             }
           }
-        },
-        "security": [
-          {
-            "HTTPBearer": []
-          }
-        ]
+        }
       }
     },
     "/v1/rulesets/{version}": {
       "get": {
         "summary": "Ruleset By Version",
         "operationId": "ruleset_by_version_v1_rulesets__version__get",
-        "security": [
-          {
-            "HTTPBearer": []
-          }
-        ],
         "parameters": [
           {
             "name": "version",
@@ -118,15 +103,38 @@
       "post": {
         "summary": "Floors",
         "operationId": "floors_v1_floors_post",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Idempotency-Key"
+            }
+          }
+        ],
         "requestBody": {
+          "required": true,
           "content": {
             "application/json": {
               "schema": {
                 "$ref": "#/components/schemas/FloorIn"
               }
             }
-          },
-          "required": true
+          }
         },
         "responses": {
           "200": {
@@ -149,27 +157,45 @@
               }
             }
           }
-        },
-        "security": [
-          {
-            "HTTPBearer": []
-          }
-        ]
+        }
       }
     },
     "/v1/rounds/realtime": {
       "post": {
         "summary": "Realtime",
         "operationId": "realtime_v1_rounds_realtime_post",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Idempotency-Key"
+            }
+          }
+        ],
         "requestBody": {
+          "required": true,
           "content": {
             "application/json": {
               "schema": {
                 "$ref": "#/components/schemas/RoundIn"
               }
             }
-          },
-          "required": true
+          }
         },
         "responses": {
           "200": {
@@ -192,27 +218,45 @@
               }
             }
           }
-        },
-        "security": [
-          {
-            "HTTPBearer": []
-          }
-        ]
+        }
       }
     },
     "/v1/rounds/day-ahead": {
       "post": {
         "summary": "Day Ahead",
         "operationId": "day_ahead_v1_rounds_day_ahead_post",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Idempotency-Key"
+            }
+          }
+        ],
         "requestBody": {
+          "required": true,
           "content": {
             "application/json": {
               "schema": {
                 "$ref": "#/components/schemas/RoundIn"
               }
             }
-          },
-          "required": true
+          }
         },
         "responses": {
           "200": {
@@ -235,12 +279,68 @@
               }
             }
           }
-        },
+        }
+      }
+    },
+    "/v1/token-prices": {
+      "post": {
+        "summary": "Token Prices",
+        "operationId": "token_prices_v1_token_prices_post",
         "security": [
           {
             "HTTPBearer": []
           }
-        ]
+        ],
+        "parameters": [
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Idempotency-Key"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/TokenPriceIn"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TokenPriceOut"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
       }
     }
   },
@@ -359,11 +459,35 @@
           },
           "pay_cents": {
             "type": "integer",
-            "title": "Pay Cents"
+            "title": "Pay Cents",
+            "description": "Per box-hour clearing price. Does not include the tip."
           },
           "tip_cents": {
             "type": "integer",
-            "title": "Tip Cents"
+            "title": "Tip Cents",
+            "description": "Per box-hour priority tip actually charged. Zero unless the pool is scarce."
+          },
+          "tip_total_cents": {
+            "type": "integer",
+            "title": "Tip Total Cents",
+            "description": "tip_cents \u00d7 hours, half-even to a cent."
+          },
+          "total_cents": {
+            "type": "integer",
+            "title": "Total Cents",
+            "description": "pay_cents \u00d7 hours + tip_total_cents."
+          },
+          "price_lock_hours": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Price Lock Hours",
+            "description": "Real-time only. Hours this fill's clearing price stays locked, at most lock_hours_max."
           }
         },
         "additionalProperties": false,
@@ -375,7 +499,9 @@
           "rung_index",
           "hours",
           "pay_cents",
-          "tip_cents"
+          "tip_cents",
+          "tip_total_cents",
+          "total_cents"
         ],
         "title": "FillOut"
       },
@@ -448,6 +574,40 @@
           "boost": {
             "type": "string",
             "title": "Boost"
+          },
+          "processor_pct": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Processor Pct"
+          },
+          "processor_fixed_cents": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "minimum": 0.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Processor Fixed Cents"
+          },
+          "expected_hours_per_txn": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Expected Hours Per Txn"
           }
         },
         "additionalProperties": false,
@@ -495,6 +655,40 @@
           "boost_used": {
             "type": "string",
             "title": "Boost Used"
+          },
+          "processor_pct": {
+            "type": "string",
+            "title": "Processor Pct"
+          },
+          "processor_fixed_cents": {
+            "type": "integer",
+            "title": "Processor Fixed Cents"
+          },
+          "expected_hours_per_txn": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Expected Hours Per Txn"
+          },
+          "request_hash": {
+            "type": "string",
+            "title": "Request Hash"
+          },
+          "idempotency_key": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Idempotency Key"
           }
         },
         "additionalProperties": false,
@@ -507,7 +701,10 @@
           "floor_usd",
           "reserve_usd",
           "u_used",
-          "boost_used"
+          "boost_used",
+          "processor_pct",
+          "processor_fixed_cents",
+          "request_hash"
         ],
         "title": "FloorOut"
       },
@@ -678,7 +875,14 @@
             "title": "Region"
           },
           "supply_hours": {
-            "type": "string",
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
             "title": "Supply Hours"
           },
           "n_hosts": {
@@ -687,9 +891,31 @@
             "title": "N Hosts"
           },
           "reserve_cents": {
-            "type": "integer",
-            "minimum": 0.0,
+            "anyOf": [
+              {
+                "type": "integer",
+                "minimum": 0.0
+              },
+              {
+                "type": "null"
+              }
+            ],
             "title": "Reserve Cents"
+          },
+          "supply_tiers": {
+            "anyOf": [
+              {
+                "items": {
+                  "$ref": "#/components/schemas/SupplyTierIn"
+                },
+                "type": "array",
+                "minItems": 1
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Supply Tiers"
           },
           "prev_base_cents": {
             "type": "integer",
@@ -757,6 +983,40 @@
             ],
             "title": "Take"
           },
+          "processor_pct": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Processor Pct"
+          },
+          "processor_fixed_cents": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "minimum": 0.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Processor Fixed Cents"
+          },
+          "expected_hours_per_txn": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Expected Hours Per Txn"
+          },
           "ema_cents": {
             "anyOf": [
               {
@@ -786,9 +1046,7 @@
           "pool_id",
           "class_id",
           "region",
-          "supply_hours",
           "n_hosts",
-          "reserve_cents",
           "prev_base_cents",
           "trailing_util_24h"
         ],
@@ -864,7 +1122,7 @@
           "degraded": {
             "type": "boolean",
             "title": "Degraded",
-            "description": "True only on a local fallback round. A live service response is false."
+            "description": "True when this round held the base and froze boost and utilization memory."
           },
           "ruleset_version": {
             "type": "string",
@@ -952,6 +1210,46 @@
             ],
             "title": "Ruleset Version"
           },
+          "degraded": {
+            "type": "boolean",
+            "title": "Degraded",
+            "description": "Hold the base and freeze boost and utilization memory. Day-ahead is refused.",
+            "default": false
+          },
+          "processor_pct": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Processor Pct"
+          },
+          "processor_fixed_cents": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "minimum": 0.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Processor Fixed Cents"
+          },
+          "expected_hours_per_txn": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Expected Hours Per Txn"
+          },
           "pools": {
             "items": {
               "$ref": "#/components/schemas/PoolIn"
@@ -1010,6 +1308,11 @@
             "type": "boolean",
             "title": "Hit Iteration Cap"
           },
+          "price_lock_hours_max": {
+            "type": "integer",
+            "title": "Price Lock Hours Max",
+            "description": "Ruleset cap on a real-time price lock, in hours."
+          },
           "pools": {
             "items": {
               "$ref": "#/components/schemas/PoolOut"
@@ -1059,6 +1362,21 @@
               }
             ],
             "title": "Upgrade Gains"
+          },
+          "request_hash": {
+            "type": "string",
+            "title": "Request Hash"
+          },
+          "idempotency_key": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Idempotency Key"
           }
         },
         "additionalProperties": false,
@@ -1069,10 +1387,12 @@
           "round_id",
           "passes",
           "hit_iteration_cap",
+          "price_lock_hours_max",
           "pools",
           "fills",
           "unfilled",
-          "pain_by_order"
+          "pain_by_order",
+          "request_hash"
         ],
         "title": "RoundOut"
       },
@@ -1085,11 +1405,6 @@
           "version": {
             "type": "string",
             "title": "Version"
-          },
-          "sha256": {
-            "type": "string",
-            "title": "Sha256",
-            "description": "Integrity hash. customer_visible.sha256 is false."
           },
           "active": {
             "type": "boolean",
@@ -1129,7 +1444,6 @@
         "required": [
           "engine_version",
           "version",
-          "sha256",
           "active",
           "effective_from",
           "changelog",
@@ -1145,21 +1459,16 @@
             "type": "string",
             "title": "Version"
           },
-          "sha256": {
+          "effective_from": {
             "type": "string",
-            "title": "Sha256"
-          },
-          "source": {
-            "type": "string",
-            "title": "Source"
+            "title": "Effective From"
           }
         },
         "additionalProperties": false,
         "type": "object",
         "required": [
           "version",
-          "sha256",
-          "source"
+          "effective_from"
         ],
         "title": "RulesetEntry"
       },
@@ -1269,6 +1578,228 @@
           "max_cents"
         ],
         "title": "RungIn"
+      },
+      "SupplyTierIn": {
+        "properties": {
+          "reserve_cents": {
+            "type": "integer",
+            "minimum": 0.0,
+            "title": "Reserve Cents"
+          },
+          "hours": {
+            "type": "string",
+            "title": "Hours"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "reserve_cents",
+          "hours"
+        ],
+        "title": "SupplyTierIn"
+      },
+      "TokenPriceIn": {
+        "properties": {
+          "ruleset_version": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Ruleset Version"
+          },
+          "pool_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Pool Id"
+          },
+          "class_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Class Id"
+          },
+          "model_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Model Id"
+          },
+          "base_cents": {
+            "type": "integer",
+            "minimum": 0.0,
+            "title": "Base Cents"
+          },
+          "reserve_cents": {
+            "type": "integer",
+            "minimum": 0.0,
+            "title": "Reserve Cents"
+          },
+          "take": {
+            "type": "string",
+            "title": "Take",
+            "description": "P2's own take for this model. The engine has no default fee."
+          },
+          "input_tokens_per_second": {
+            "type": "string",
+            "title": "Input Tokens Per Second"
+          },
+          "output_tokens_per_second": {
+            "type": "string",
+            "title": "Output Tokens Per Second"
+          },
+          "u_batch": {
+            "type": "string",
+            "title": "U Batch",
+            "default": "1"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "base_cents",
+          "reserve_cents",
+          "take",
+          "input_tokens_per_second",
+          "output_tokens_per_second"
+        ],
+        "title": "TokenPriceIn"
+      },
+      "TokenPriceOut": {
+        "properties": {
+          "engine_version": {
+            "type": "string",
+            "title": "Engine Version"
+          },
+          "ruleset_version": {
+            "type": "string",
+            "title": "Ruleset Version"
+          },
+          "pool_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Pool Id"
+          },
+          "class_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Class Id"
+          },
+          "model_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Model Id"
+          },
+          "take": {
+            "type": "string",
+            "title": "Take"
+          },
+          "base_cents": {
+            "type": "integer",
+            "title": "Base Cents"
+          },
+          "reserve_cents": {
+            "type": "integer",
+            "title": "Reserve Cents"
+          },
+          "reference_cents": {
+            "type": "integer",
+            "title": "Reference Cents",
+            "description": "max(reserve, base), before the take gross-up."
+          },
+          "billed_hour_cents": {
+            "type": "integer",
+            "title": "Billed Hour Cents",
+            "description": "Ceiling of reference / (1 \u2212 take). The hour a renter is billed from."
+          },
+          "input_per_1k_cents": {
+            "type": "integer",
+            "title": "Input Per 1K Cents"
+          },
+          "output_per_1k_cents": {
+            "type": "integer",
+            "title": "Output Per 1K Cents"
+          },
+          "loaded_hour_min_cents": {
+            "type": "integer",
+            "title": "Loaded Hour Min Cents",
+            "description": "The pool reserve. A host hour is not priced below this."
+          },
+          "u_batch": {
+            "type": "string",
+            "title": "U Batch"
+          },
+          "request_hash": {
+            "type": "string",
+            "title": "Request Hash"
+          },
+          "idempotency_key": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Idempotency Key"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "engine_version",
+          "ruleset_version",
+          "take",
+          "base_cents",
+          "reserve_cents",
+          "reference_cents",
+          "billed_hour_cents",
+          "input_per_1k_cents",
+          "output_per_1k_cents",
+          "loaded_hour_min_cents",
+          "u_batch",
+          "request_hash"
+        ],
+        "title": "TokenPriceOut"
       },
       "UnfilledOut": {
         "properties": {

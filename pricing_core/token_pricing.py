@@ -23,6 +23,27 @@ def reference_cents(reserve_cents: int, base_cents: int) -> int:
     return max(reserve_cents, base_cents)
 
 
+def price_per_thousand_cents(
+    reference_cents_value: int,
+    tokens_per_second: Decimal,
+    u_batch: Decimal,
+) -> int:
+    """Ceiling cents per 1,000 tokens, so the implied hour stays at or above the reference.
+
+    Per-1k is ``price_per_1M / 1000`` before the ceiling. Dynamic per-token
+    clearing is not this function.
+    """
+    if tokens_per_second <= 0:
+        raise ValueError("throughput parameter must be positive")
+    if not (Decimal(0) < u_batch <= 1):
+        raise ValueError("u_batch must be in (0, 1]")
+    if reference_cents_value < 0:
+        raise ValueError("reference price must be non-negative")
+    tokens_per_hour = Decimal(3600) * tokens_per_second * u_batch
+    dollars = (Decimal(reference_cents_value) / Decimal(100)) / tokens_per_hour * Decimal(1000)
+    return ceil_cents(dollars)
+
+
 def price_per_million_cents(
     reference_cents_value: int,
     tokens_per_second: Decimal,
