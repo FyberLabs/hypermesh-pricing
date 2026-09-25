@@ -1,6 +1,6 @@
 # Hypermesh pricing
 
-Stateless pricing engine for Hypermesh, version 0.1.1. It is the external service Panopticon calls. It is versioned and deployed on its own. This repository does not change Panopticon, Stripe, or a database, and it does not deploy anything.
+Stateless pricing engine for Hypermesh, version 0.1.1. It is the internal HTTP service Panopticon calls. It is versioned on its own and published as a container image. This repository does not change Panopticon, Stripe, or a database.
 
 The clearing rules follow the 2026-09-25 pricing memos. The pure functions follow the private market-sim reference (`floor.py`, `controller.py`, `orders.py`, `clearing.py`, `token_pricing.py`). Every tuning value shipped in `pricing_core/rulesets/` is a **simulated default** from that reference (seed 5547). None of it is a measured price, utilization, or revenue.
 
@@ -110,36 +110,71 @@ A degraded round still uses integer cents and still ceilings the reserve. It doe
 - A new ruleset takes effect only at a round boundary, and not before its `effective_from`. Panopticon must not resubmit a cleared `round_id` under a different ruleset. This service cannot see that history; it will happily price whatever it is sent, and the same inputs (including an explicit `ruleset_version`) always produce the same price.
 - A published ruleset file does not change. `tests/test_ruleset.py` pins the sha256 of `pricing_core/rulesets/2026-09-25.1.json` and of `2026-09-25.2.json`. A tuning change is a new file, added to `PUBLISHED_VERSIONS`. `2026-09-25.2` adds `market.lock_hours_max` (24). It does not edit `.1`.
 - `engine_version` is the package version (`0.1.1`). It moves when the code moves, even if the ruleset does not.
-- The `v0.1.1` git tag is cut after this release is merged. Do not point production at a moving tag.
+- The `v0.1.1` git tag is cut after this release is merged. Pushing that tag publishes the image. Do not point production at a moving tag. Pin the digest the release workflow prints.
 
 ## Images
 
-Release tags `v*` build and push `ghcr.io/fyberlabs/hypermesh-pricing:<tag>` from a GitHub-hosted runner (`.github/workflows/release.yml`) using `GITHUB_TOKEN` with `packages: write`. The workflow prints the image digest. Pin the running image by digest:
+`.github/workflows/release.yml` builds and pushes `ghcr.io/fyberlabs/hypermesh-pricing` from a GitHub-hosted `ubuntu-latest` runner, using `GITHUB_TOKEN` with `packages: write`.
+
+| Git push | Image tags |
+|---|---|
+| `v*` tag, for example `v0.1.1` | `ghcr.io/fyberlabs/hypermesh-pricing:v0.1.1` |
+| branch `main` | `ghcr.io/fyberlabs/hypermesh-pricing:main` and `ghcr.io/fyberlabs/hypermesh-pricing:sha-<full commit sha>` |
+
+The job prints the image digest. Pin the running image by digest:
 
 ```text
 ghcr.io/fyberlabs/hypermesh-pricing@sha256:<digest>
 ```
 
-The tag can be moved. The digest cannot.
+The tag can be moved. The digest cannot. There is no deploy job in this repository. Panopticon pulls the pinned image and runs it.
+
+A new GHCR package is private until its visibility is set. The release workflow sets this package to public, matching the repository, so a compose host can pull the digest without a registry login. The image does not contain `PRICING_SERVICE_TOKEN`.
 
 ## Run
 
+The process listens on `0.0.0.0:8080`. `GET /healthz` does not require a bearer token. Rounds, floors, and token prices do: `Authorization: Bearer $PRICING_SERVICE_TOKEN`.
+
+| Variable | Required | Meaning |
+|---|---|---|
+| `PRICING_SERVICE_TOKEN` | yes | Bearer token for `/v1` pricing calls. The process exits before it listens when this is unset, empty, or only whitespace. It is not written into the image and it is not logged. |
+| `PRICING_RULESET_DIR` | no | Directory that replaces the packaged rulesets. Leave it unset in production so the image uses the files shipped in `pricing_core`. |
+
+Do not commit a real token.
+
+From a checkout, for local development:
+
 ```bash
 python -m pip install -e ".[service,test]"
-PRICING_SERVICE_TOKEN=change-me uvicorn pricing_service.app:app --host 0.0.0.0 --port 8080
+PRICING_SERVICE_TOKEN=change-me python -m pricing_service
 pytest
 ```
 
-The service token comes from the `PRICING_SERVICE_TOKEN` environment variable only. Do not commit one.
+`python -m pricing_service` is the container command. Replace `change-me` with a token you supply at runtime.
 
-The container is Alpine (`python:3.13-alpine`). FastAPI, Pydantic, and uvicorn publish musllinux wheels, so the image does not need a compiler. Rulesets are inside the `pricing_core` package; the image does not set `PRICING_RULESET_DIR`.
+The container is Alpine (`python:3.13-alpine`), runs as user `pricing` (uid 10001), and does not need a compiler: FastAPI, Pydantic, and uvicorn publish musllinux wheels. Rulesets are inside the `pricing_core` package.
 
 ```bash
-docker build -t hypermesh-pricing:0.1.1 .
-docker run --rm -p 8080:8080 -e PRICING_SERVICE_TOKEN=change-me hypermesh-pricing:0.1.1
+docker build -t hypermesh-pricing:local .
+docker run --rm -p 8080:8080 -e PRICING_SERVICE_TOKEN=change-me hypermesh-pricing:local
+curl -fsS http://127.0.0.1:8080/healthz
 ```
 
-CI (`.github/workflows/ci.yml`) runs pytest and a Docker image build on GitHub-hosted `ubuntu-latest` runners. There is no deploy job. The parity fixtures are already in the repository. CI does not fetch the private market-sim reference.
+Omitting `PRICING_SERVICE_TOKEN` makes that `docker run` exit before it binds to port 8080.
+
+Panopticon runs the published image as an internal compose service and pins the digest:
+
+```yaml
+services:
+  pricing:
+    image: ghcr.io/fyberlabs/hypermesh-pricing@sha256:<digest>
+    environment:
+      PRICING_SERVICE_TOKEN: ${PRICING_SERVICE_TOKEN}
+    expose:
+      - "8080"
+```
+
+CI (`.github/workflows/ci.yml`) runs pytest and builds the image, then checks that a missing token exits and that `/healthz` answers, on GitHub-hosted `ubuntu-latest` runners. There is no deploy job. The parity fixtures are already in the repository. CI does not fetch the private market-sim reference.
 
 To regenerate those fixtures on a machine that already has market-sim:
 

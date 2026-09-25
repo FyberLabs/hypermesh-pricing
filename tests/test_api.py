@@ -48,6 +48,33 @@ def test_core_imports_are_stdlib_only():
                 assert name in allowed, f"{path.name} imports {name}"
 
 
+def test_process_refuses_to_start_without_a_token(monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]):
+    from pricing_service.__main__ import main, require_token
+
+    monkeypatch.delenv(TOKEN_ENV, raising=False)
+    with pytest.raises(SystemExit) as missing:
+        require_token()
+    assert missing.value.code == 1
+    assert capsys.readouterr().err.strip() == f"{TOKEN_ENV} is required"
+
+    monkeypatch.setenv(TOKEN_ENV, "   ")
+    with pytest.raises(SystemExit) as blank:
+        require_token()
+    assert blank.value.code == 1
+    assert capsys.readouterr().err.strip() == f"{TOKEN_ENV} is required"
+
+    monkeypatch.setenv(TOKEN_ENV, TOKEN)
+    require_token()
+
+    monkeypatch.delenv(TOKEN_ENV, raising=False)
+    with pytest.raises(SystemExit) as exited:
+        main()
+    assert exited.value.code == 1
+    err = capsys.readouterr().err
+    assert err.strip() == f"{TOKEN_ENV} is required"
+    assert TOKEN not in err
+
+
 def test_healthz_is_open_and_v1_requires_a_bearer_token(client: TestClient, monkeypatch: pytest.MonkeyPatch):
     health = client.get("/healthz")
     assert health.status_code == 200

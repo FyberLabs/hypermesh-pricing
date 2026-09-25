@@ -20,4 +20,8 @@ RUN pip install --no-cache-dir ".[service]" \
 USER pricing
 EXPOSE 8080
 
-CMD ["uvicorn", "pricing_service.app:app", "--host", "0.0.0.0", "--port", "8080"]
+# Exits before listening when PRICING_SERVICE_TOKEN is unset or blank.
+# The token is read from the environment at start and is never printed.
+ENTRYPOINT ["python", "-m", "pricing_service"]
+HEALTHCHECK --interval=30s --timeout=3s --start-period=10s --retries=3 \
+  CMD ["python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8080/healthz')"]

@@ -1,9 +1,11 @@
 """Stateless pricing HTTP API.
 
-Auth is a bearer token from ``PRICING_SERVICE_TOKEN``. The process refuses
-protected ``/v1`` calls when that variable is unset. ``GET /healthz`` and
-the read-only ruleset routes stay open. Those ruleset responses contain
-only customer-safe fields. Panopticon should still proxy them through its
+Auth is a bearer token from ``PRICING_SERVICE_TOKEN``. ``python -m
+pricing_service`` (the container entrypoint) exits before listening when
+that variable is unset or blank. Protected ``/v1`` calls also fail closed
+if a process is serving without it. ``GET /healthz`` and the read-only
+ruleset routes stay open. Those ruleset responses contain only
+customer-safe fields. Panopticon should still proxy them through its
 public edge. The token is never logged and is not a configuration file.
 
 An optional ``Idempotency-Key`` header is echoed and is not part of
