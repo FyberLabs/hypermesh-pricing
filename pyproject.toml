@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "pricing-core"
-version = "0.1.0"
+version = "0.1.1"
 description = "Hypermesh pricing engine: pure clearing core and a stateless internal service."
 readme = "README.md"
 license = "MIT"
@@ -24,6 +24,9 @@ test = [
 
 [tool.setuptools.packages.find]
 include = ["pricing_core*", "pricing_service*"]
+
+[tool.setuptools.package-data]
+pricing_core = ["rulesets/*.json", "rulesets/*.sha256"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

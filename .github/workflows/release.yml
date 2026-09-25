@@ -1,0 +1,38 @@
+name: release
+
+on:
+  push:
+    tags:
+      - "v*"
+
+# Cut the tag after merge. This workflow only publishes the image.
+# Public repository. GitHub-hosted runners. There is no deploy job.
+permissions:
+  contents: read
+  packages: write
+
+jobs:
+  image:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Log in to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Build and push
+        run: |
+          set -euo pipefail
+          image="ghcr.io/fyberlabs/hypermesh-pricing:${GITHUB_REF_NAME}"
+          docker build -t "$image" .
+          push_out="$(docker push "$image")"
+          printf '%s\n' "$push_out"
+          digest="$(printf '%s\n' "$push_out" | awk '/digest: / { print $3; exit }')"
+          if [ -z "$digest" ]; then
+            echo "docker push did not print a digest" >&2
+            exit 1
+          fi
+          echo "image digest: ghcr.io/fyberlabs/hypermesh-pricing@${digest}"
+          echo "Pin the running image by that digest. The tag can move; the digest cannot."

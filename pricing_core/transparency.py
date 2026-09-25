@@ -46,6 +46,7 @@ _ALWAYS_VISIBLE = frozenset(
         "market.share_cap",
         "market.day_ahead_share_max",
         "market.day_ahead_upgrade",
+        "market.lock_hours_max",
     }
 )
 # Shown only while the conditional schedule is the rule customers are under.
@@ -133,6 +134,10 @@ def public_lines(raw: dict) -> list[str]:
         lines.append("A day-ahead award can move up to a higher choice when the cleared price allows it")
     else:
         lines.append("A day-ahead award stays on the choice it won")
+    if "lock_hours_max" in market:
+        lines.append(
+            f"A real-time fill locks its price for up to {int(market['lock_hours_max'])} hours"
+        )
     return lines
 
 
@@ -167,6 +172,31 @@ def ruleset_document(ruleset: object, *, active: bool) -> dict:
         "public_summary": list(raw["public"]["lines"]),
         "customer_visible": dict(ENVELOPE_CUSTOMER_VISIBLE),
         "parameters": parameter_rows(raw),
+    }
+
+
+def customer_ruleset_document(ruleset: object, *, active: bool) -> dict:
+    """Read-only ruleset card. Customer-safe fields only.
+
+    The unauthenticated GET routes return this. Integrity hashes, the
+    simulator source note, and parameters marked not customer-visible
+    (clearing internals such as iteration caps and hysteresis) stay off
+    the wire. Panopticon should still proxy these routes through its
+    public edge rather than exposing the pricing process directly.
+    """
+    full = ruleset_document(ruleset, active=active)
+    visible_envelope = {
+        key: value for key, value in full["customer_visible"].items() if key != "sha256" and value
+    }
+    return {
+        "engine_version": full["engine_version"],
+        "version": full["version"],
+        "active": full["active"],
+        "effective_from": full["effective_from"],
+        "changelog": full["changelog"],
+        "public_summary": full["public_summary"],
+        "customer_visible": visible_envelope,
+        "parameters": [row for row in full["parameters"] if row["customer_visible"]],
     }
 
 

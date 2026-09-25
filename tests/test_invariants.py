@@ -232,17 +232,17 @@ def test_illustrative_realtime_round_pays_base_plus_own_tip_only_when_scarce():
     assert result.pools["L"].demand == 4
     assert result.pools["H"].scarce is True
     assert result.pools["L"].scarce is False
-    pays = {fill.order_id: (fill.pool_id, fill.pay_cents) for fill in result.fills}
-    assert pays["E"] == ("H", 110)
-    assert pays["C"] == ("H", 105)
-    assert pays["A"] == ("H", 100)
-    assert pays["F"] == ("H", 100)
+    pays = {fill.order_id: (fill.pool_id, fill.pay_cents, fill.tip_cents) for fill in result.fills}
+    assert pays["E"] == ("H", 100, 10)
+    assert pays["C"] == ("H", 100, 5)
+    assert pays["A"] == ("H", 100, 0)
+    assert pays["F"] == ("H", 100, 0)
     for oid in ("B", "D", "G", "J"):
-        assert pays[oid] == ("L", 40)
+        assert pays[oid] == ("L", 40, 0)
     for fill in result.fills:
         assert fill.pay_cents >= pools[fill.pool_id].reserve_cents
         order = next(item for item in orders if item.order_id == fill.order_id)
-        assert fill.pay_cents <= max(rung.max_cents for rung in order.rungs)
+        assert fill.pay_cents + fill.tip_cents <= max(rung.max_cents for rung in order.rungs)
 
 
 def test_realtime_ignores_arrival_order_and_share_cap_binds():
@@ -284,7 +284,8 @@ def test_never_clears_below_reserve_or_above_max():
     ]
     result = clear_realtime(orders, _pools(H=(1, 100, 100)), share_cap=None, tip_cap=Decimal("0.10"))
     assert [fill.order_id for fill in result.fills] == ["ok"]
-    assert result.fills[0].pay_cents == 110
+    assert result.fills[0].pay_cents == 100
+    assert result.fills[0].tip_cents == 10
     assert result.pools["H"].scarce is True
 
 

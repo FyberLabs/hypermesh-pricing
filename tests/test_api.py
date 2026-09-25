@@ -29,6 +29,7 @@ def test_core_imports_are_stdlib_only():
         "datetime",
         "decimal",
         "hashlib",
+        "hmac",
         "json",
         "os",
         "pathlib",
@@ -51,7 +52,7 @@ def test_healthz_is_open_and_v1_requires_a_bearer_token(client: TestClient, monk
     health = client.get("/healthz")
     assert health.status_code == 200
     assert health.json()["status"] == "ok"
-    assert health.json()["engine_version"] == "0.1.0"
+    assert health.json()["engine_version"] == "0.1.1"
     missing = client.post("/v1/floors", json={})
     assert missing.status_code == 401
     wrong = client.post("/v1/floors", json={}, headers={"Authorization": "Bearer no"})
@@ -59,7 +60,9 @@ def test_healthz_is_open_and_v1_requires_a_bearer_token(client: TestClient, monk
     monkeypatch.delenv(TOKEN_ENV, raising=False)
     bare = TestClient(create_app())
     assert bare.get("/healthz").status_code == 200
-    assert bare.get("/v1/rulesets").status_code == 503
+    assert bare.get("/v1/rulesets").status_code == 200
+    assert bare.get("/v1/rulesets/active").status_code == 200
+    assert bare.post("/v1/floors", json={}).status_code == 503
 
 
 def test_floors_require_take_and_ceil_the_jetson_row(client: TestClient):
@@ -84,8 +87,9 @@ def test_floors_require_take_and_ceil_the_jetson_row(client: TestClient):
     )
     assert ok.status_code == 200
     body = ok.json()
-    assert body["ruleset_version"] == "2026-09-25.1"
-    assert body["engine_version"] == "0.1.0"
+    assert body["ruleset_version"] == "2026-09-25.2"
+    assert body["engine_version"] == "0.1.1"
+    assert body["request_hash"]
     # Memo table prints $0.166 and $0.180. Ceiling cents stay within 1 cent
     # of those rounded figures and are never below the exact reserve.
     assert abs(body["floor_cents"] - 16.6) <= 1
@@ -98,8 +102,9 @@ def test_realtime_day_ahead_and_rulesets(client: TestClient):
     assert realtime.status_code == 200, realtime.text
     body = realtime.json()
     assert body["round_id"] == "r-1"
-    assert body["ruleset_version"] == "2026-09-25.1"
-    assert body["engine_version"] == "0.1.0"
+    assert body["ruleset_version"] == "2026-09-25.2"
+    assert body["engine_version"] == "0.1.1"
+    assert body["request_hash"]
     pool = body["pools"][0]
     assert pool["base_cents"] >= pool["reserve_cents"]
     assert pool["next_base_cents"] >= pool["reserve_cents"]
@@ -125,12 +130,13 @@ def test_realtime_day_ahead_and_rulesets(client: TestClient):
     assert ahead_body["pools"][0]["supply_hours"] == "3"
     assert ahead_body["pools"][0]["supply_clamped"] is True
 
-    listed = client.get("/v1/rulesets", headers=_auth())
+    listed = client.get("/v1/rulesets")
     assert listed.status_code == 200
     versions = [item["version"] for item in listed.json()["rulesets"]]
-    assert versions == ["2026-09-25.1"]
-    assert listed.json()["rulesets"][0]["sha256"]
-    assert "Simulated" in listed.json()["rulesets"][0]["source"]
+    assert versions == ["2026-09-25.1", "2026-09-25.2"]
+    assert "sha256" not in listed.json()["rulesets"][0]
+    assert "source" not in listed.json()["rulesets"][0]
+    assert listed.json()["default"] == "2026-09-25.2"
 
     missing = client.post(
         "/v1/rounds/realtime",
@@ -139,37 +145,46 @@ def test_realtime_day_ahead_and_rulesets(client: TestClient):
     )
     assert missing.status_code == 404
 
-    active = client.get("/v1/rulesets/active", headers=_auth())
+    active = client.get("/v1/rulesets/active")
     assert active.status_code == 200, active.text
     card = active.json()
-    named = client.get("/v1/rulesets/2026-09-25.1", headers=_auth())
+    named = client.get("/v1/rulesets/2026-09-25.2")
     assert named.status_code == 200, named.text
     assert named.json() == card
-    assert card["version"] == "2026-09-25.1"
+    previous = client.get("/v1/rulesets/2026-09-25.1")
+    assert previous.status_code == 200, previous.text
+    assert previous.json()["active"] is False
+    assert previous.json()["changelog"]["previous_version"] is None
+    assert card["version"] == "2026-09-25.2"
     assert card["active"] is True
     assert card["effective_from"] == "2026-09-25T00:00:00Z"
-    assert card["changelog"]["previous_version"] is None
+    assert card["changelog"]["previous_version"] == "2026-09-25.1"
     assert card["customer_visible"]["public_summary"] is True
-    assert card["customer_visible"]["sha256"] is False
+    assert "sha256" not in card
+    assert "source" not in card
     assert "Prices move at most 2.5% per 15 minutes" in card["public_summary"]
+    assert "A real-time fill locks its price for up to 24 hours" in card["public_summary"]
     visible = {row["path"]: row for row in card["parameters"]}
     assert visible["controller.delta"]["customer_visible"] is True
     assert visible["controller.delta"]["value"] == "0.025"
-    assert visible["market.max_passes"]["customer_visible"] is False
-    assert visible["boost.hysteresis"]["customer_visible"] is False
+    assert visible["market.lock_hours_max"]["value"] == 24
+    assert "market.max_passes" not in visible
+    assert "boost.hysteresis" not in visible
     dumped = json.dumps(card)
     assert "5547" not in dumped
     assert "seed" not in dumped.lower()
     assert "lottery" not in card
     assert "orders" not in card
-    unknown = client.get("/v1/rulesets/1999-01-01.0", headers=_auth())
+    unknown = client.get("/v1/rulesets/1999-01-01.0")
     assert unknown.status_code == 404
     labeled = client.post(
         "/v1/rounds/realtime",
         json={**_round(day_ahead=False), "degraded": True},
         headers=_auth(),
     )
-    assert labeled.status_code == 422
+    assert labeled.status_code == 200, labeled.text
+    assert labeled.json()["pools"][0]["degraded"] is True
+    assert labeled.json()["pools"][0]["next_base_cents"] == labeled.json()["pools"][0]["base_cents"]
 
 
 def test_openapi_document_matches_the_app(client: TestClient):
@@ -185,6 +200,7 @@ def test_openapi_document_matches_the_app(client: TestClient):
         "/v1/floors",
         "/v1/rounds/realtime",
         "/v1/rounds/day-ahead",
+        "/v1/token-prices",
     ):
         assert route in committed["paths"]
     assert "bearer" in json.dumps(committed["components"].get("securitySchemes", {})).lower() or any(

@@ -5,15 +5,13 @@ FROM python:3.13-alpine
 WORKDIR /app
 
 ENV PYTHONDONTWRITEBYTECODE=1 \
-    PYTHONUNBUFFERED=1 \
-    PRICING_RULESET_DIR=/app/rulesets
+    PYTHONUNBUFFERED=1
 
 RUN adduser -D -u 10001 pricing
 
 COPY pyproject.toml README.md ./
 COPY pricing_core ./pricing_core
 COPY pricing_service ./pricing_service
-COPY rulesets ./rulesets
 COPY openapi ./openapi
 
 RUN pip install --no-cache-dir ".[service]" \
