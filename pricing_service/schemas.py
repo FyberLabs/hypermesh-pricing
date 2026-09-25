@@ -119,7 +119,14 @@ class PoolOut(_Model):
     cap_cents: int
     utilization: str
     scarce: bool
+    org_cap_applied: bool = Field(description="The 25% scarce-pool org cap bound at least one org.")
     rationed: bool
+    boost_active: bool = Field(description="The floor boost multiple in force is above 1.")
+    boost_multiple: str = Field(description="Current floor-boost multiple. Safe to show customers.")
+    at_cap: bool = Field(description="The live price is at or above the spike cap.")
+    at_floor: bool = Field(description="The live price is at the floor-based reserve, the minimum price.")
+    degraded: bool = Field(description="True only on a local fallback round. A live service response is false.")
+    ruleset_version: str = Field(description="Ruleset that priced this pool. Stamp it on the receipt.")
     demand_hours: str
     supply_hours: str
     supply_clamped: bool
@@ -164,6 +171,31 @@ class RulesetListOut(_Model):
     engine_version: str
     default: str
     rulesets: list[RulesetEntry]
+
+
+class ChangelogOut(_Model):
+    previous_version: str | None
+    summary: str
+
+
+class ParameterOut(_Model):
+    path: str
+    value: str | int | bool
+    customer_visible: bool = Field(
+        description="True when a renter or host dashboard may render this parameter."
+    )
+
+
+class RulesetDetailOut(_Model):
+    engine_version: str
+    version: str
+    sha256: str = Field(description="Integrity hash. customer_visible.sha256 is false.")
+    active: bool
+    effective_from: str
+    changelog: ChangelogOut
+    public_summary: list[str]
+    customer_visible: dict[str, bool]
+    parameters: list[ParameterOut]
 
 
 class HealthOut(_Model):

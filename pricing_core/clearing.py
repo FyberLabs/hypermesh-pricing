@@ -56,6 +56,7 @@ class PoolStats:
     demand: Decimal
     utilization: Decimal
     scarce: bool
+    org_cap_applied: bool
     base_cents: int
     reserve_cents: int
     clearing_cents: int | None
@@ -215,8 +216,13 @@ def _allocate_realtime(
     base_cents: int,
     share_cap: Decimal | None,
     tip_cap: Decimal | None,
-) -> dict[int, Decimal]:
-    """Greedy fill. In-cap slices outrank every over-cap slice."""
+) -> tuple[dict[int, Decimal], bool]:
+    """Greedy fill. In-cap slices outrank every over-cap slice.
+
+    The second value is true when the per-org cap pushed some hours into
+    the over-cap band. Leftover hours may still fill; the flag records
+    that the cap bound an org.
+    """
     total = sum((c.hours for c in chunks), Decimal(0))
     use_cap = share_cap is not None and total > supply + EPS
     cap_hours = share_cap * supply if use_cap else Decimal("Infinity")
@@ -225,6 +231,7 @@ def _allocate_realtime(
         by_org[chunk.org_id].append(chunk)
 
     slices: list[tuple[int, tuple, _Chunk, Decimal]] = []
+    capped = False
     for org_chunks in by_org.values():
         ranked = sorted(org_chunks, key=lambda c: _rank_key_realtime(c, base_cents, tip_cap))
         room = cap_hours
@@ -236,6 +243,7 @@ def _allocate_realtime(
             if in_qty > EPS:
                 slices.append((0, key, chunk, in_qty))
             if over_qty > EPS:
+                capped = True
                 slices.append((1, key, chunk, over_qty))
     slices.sort(key=lambda item: (item[0], item[1]))
 
@@ -246,7 +254,7 @@ def _allocate_realtime(
         if take > EPS:
             accepted[chunk.chunk_id] += take
             remaining -= take
-    return accepted
+    return accepted, capped
 
 
 def _allocate_day_ahead(
@@ -254,7 +262,7 @@ def _allocate_day_ahead(
     supply: Decimal,
     reserve_cents: int,
     share_cap: Decimal | None,
-) -> tuple[dict[int, Decimal], int]:
+) -> tuple[dict[int, Decimal], int, bool]:
     total = sum((c.hours for c in chunks), Decimal(0))
     use_cap = share_cap is not None and total > supply + EPS
     cap_hours = share_cap * supply if use_cap else Decimal("Infinity")
@@ -264,6 +272,7 @@ def _allocate_day_ahead(
 
     in_cap: list[tuple[tuple, _Chunk, Decimal]] = []
     over_cap: list[tuple[tuple, _Chunk, Decimal]] = []
+    capped = False
     for org_chunks in by_org.values():
         ranked = sorted(
             org_chunks,
@@ -278,6 +287,7 @@ def _allocate_day_ahead(
             if in_qty > EPS:
                 in_cap.append((key, chunk, in_qty))
             if over_qty > EPS:
+                capped = True
                 over_cap.append((key, chunk, over_qty))
     in_cap.sort(key=lambda item: item[0])
     over_cap.sort(key=lambda item: item[0])
@@ -302,7 +312,7 @@ def _allocate_day_ahead(
         if take > EPS:
             accepted[chunk.chunk_id] += take
             remaining -= take
-    return accepted, price
+    return accepted, price, capped
 
 
 def clear_realtime(
@@ -372,6 +382,7 @@ def _finish_realtime(
     passes = 0
     hit_cap = False
     placed: list[_Chunk] = []
+    org_cap: dict[str, bool] = {}
     if seeking:
         for passes in range(1, max_passes + 1):
             for chunk in seeking:
@@ -384,11 +395,13 @@ def _finish_realtime(
                 by_pool[chunk.pool_id].append(chunk)
             new_placed: list[_Chunk] = []
             rejected: list[_Chunk] = []
+            org_cap = {}
             for pool_id in sorted(by_pool):
                 pool = pools[pool_id]
-                accepted = _allocate_realtime(
+                accepted, capped = _allocate_realtime(
                     by_pool[pool_id], pool.supply, pool.base_cents, share_cap, tip_cap
                 )
+                org_cap[pool_id] = capped
                 for chunk in by_pool[pool_id]:
                     got = accepted.get(chunk.chunk_id, Decimal(0))
                     if got >= chunk.hours - EPS:
@@ -437,7 +450,7 @@ def _finish_realtime(
         current = rung_won[chunk.order_id]
         if current is None or chunk.rung_index < current:
             rung_won[chunk.order_id] = chunk.rung_index
-    stats = _stats(pools, demand, day_ahead=False, prices=None)
+    stats = _stats(pools, demand, day_ahead=False, prices=None, org_cap=org_cap)
     return ClearResult(
         fills=_sort_fills(fills),
         pools=stats,
@@ -463,6 +476,7 @@ def _finish_day_ahead(
     accepted_last: dict[str, dict[int, Decimal]] = {}
     price_last: dict[str, int] = {}
     last_bid: dict[str, Decimal] = {}
+    org_cap: dict[str, bool] = {}
     if seeking:
         for passes in range(1, max_passes + 1):
             by_pool: dict[str, list[_Chunk]] = defaultdict(list)
@@ -477,13 +491,15 @@ def _finish_day_ahead(
             next_seeking: list[_Chunk] = []
             moved = False
             rejected_parents: list[_Chunk] = []
+            org_cap = {}
             for pool_id in sorted(by_pool):
                 pool = pools[pool_id]
-                accepted, price = _allocate_day_ahead(
+                accepted, price, capped = _allocate_day_ahead(
                     by_pool[pool_id], pool.supply, pool.reserve_cents, share_cap
                 )
                 accepted_last[pool_id] = accepted
                 price_last[pool_id] = price
+                org_cap[pool_id] = capped
                 for chunk in by_pool[pool_id]:
                     got = accepted.get(chunk.chunk_id, Decimal(0))
                     if got >= chunk.hours - EPS:
@@ -547,7 +563,7 @@ def _finish_day_ahead(
             final[pool_id] = pool.reserve_cents
         else:
             final[pool_id] = None
-    stats = _stats(pools, last_bid, day_ahead=True, prices=final)
+    stats = _stats(pools, last_bid, day_ahead=True, prices=final, org_cap=org_cap)
     return ClearResult(
         fills=_sort_fills(fills),
         pools=stats,
@@ -629,6 +645,7 @@ def _stats(
     *,
     day_ahead: bool,
     prices: dict[str, int | None] | None,
+    org_cap: dict[str, bool] | None = None,
 ) -> dict[str, PoolStats]:
     stats: dict[str, PoolStats] = {}
     for pool_id in sorted(pools):
@@ -646,6 +663,7 @@ def _stats(
             demand=dem,
             utilization=util,
             scarce=dem > pool.supply + EPS,
+            org_cap_applied=bool(org_cap and org_cap.get(pool_id, False)),
             base_cents=pool.base_cents,
             reserve_cents=pool.reserve_cents,
             clearing_cents=price,

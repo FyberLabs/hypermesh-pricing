@@ -2,7 +2,7 @@
   "openapi": "3.1.0",
   "info": {
     "title": "Hypermesh pricing",
-    "description": "Stateless internal pricing engine. Tuning values in the published ruleset are Simulated (market-sim seed 5547), not measured Fyber prices. The platform fee is a per-request take; the ruleset does not set one.",
+    "description": "Stateless internal pricing engine. Tuning values in the published ruleset are Simulated (market-sim seed 5547), not measured Fyber prices. The platform fee is a per-request take; the ruleset does not set one. GET /v1/rulesets/active is the customer-facing rules card: show public_summary and parameters marked customer_visible.",
     "version": "0.1.0"
   },
   "paths": {
@@ -45,6 +45,73 @@
             "HTTPBearer": []
           }
         ]
+      }
+    },
+    "/v1/rulesets/active": {
+      "get": {
+        "summary": "Ruleset Active",
+        "operationId": "ruleset_active_v1_rulesets_active_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RulesetDetailOut"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ]
+      }
+    },
+    "/v1/rulesets/{version}": {
+      "get": {
+        "summary": "Ruleset By Version",
+        "operationId": "ruleset_by_version_v1_rulesets__version__get",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "version",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Version"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RulesetDetailOut"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
       }
     },
     "/v1/floors": {
@@ -241,6 +308,32 @@
           "direction"
         ],
         "title": "BoostOut"
+      },
+      "ChangelogOut": {
+        "properties": {
+          "previous_version": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Previous Version"
+          },
+          "summary": {
+            "type": "string",
+            "title": "Summary"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "previous_version",
+          "summary"
+        ],
+        "title": "ChangelogOut"
       },
       "FillOut": {
         "properties": {
@@ -535,6 +628,41 @@
         "type": "object",
         "title": "PainIn"
       },
+      "ParameterOut": {
+        "properties": {
+          "path": {
+            "type": "string",
+            "title": "Path"
+          },
+          "value": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "integer"
+              },
+              {
+                "type": "boolean"
+              }
+            ],
+            "title": "Value"
+          },
+          "customer_visible": {
+            "type": "boolean",
+            "title": "Customer Visible",
+            "description": "True when a renter or host dashboard may render this parameter."
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "path",
+          "value",
+          "customer_visible"
+        ],
+        "title": "ParameterOut"
+      },
       "PoolIn": {
         "properties": {
           "pool_id": {
@@ -704,9 +832,44 @@
             "type": "boolean",
             "title": "Scarce"
           },
+          "org_cap_applied": {
+            "type": "boolean",
+            "title": "Org Cap Applied",
+            "description": "The 25% scarce-pool org cap bound at least one org."
+          },
           "rationed": {
             "type": "boolean",
             "title": "Rationed"
+          },
+          "boost_active": {
+            "type": "boolean",
+            "title": "Boost Active",
+            "description": "The floor boost multiple in force is above 1."
+          },
+          "boost_multiple": {
+            "type": "string",
+            "title": "Boost Multiple",
+            "description": "Current floor-boost multiple. Safe to show customers."
+          },
+          "at_cap": {
+            "type": "boolean",
+            "title": "At Cap",
+            "description": "The live price is at or above the spike cap."
+          },
+          "at_floor": {
+            "type": "boolean",
+            "title": "At Floor",
+            "description": "The live price is at the floor-based reserve, the minimum price."
+          },
+          "degraded": {
+            "type": "boolean",
+            "title": "Degraded",
+            "description": "True only on a local fallback round. A live service response is false."
+          },
+          "ruleset_version": {
+            "type": "string",
+            "title": "Ruleset Version",
+            "description": "Ruleset that priced this pool. Stamp it on the receipt."
           },
           "demand_hours": {
             "type": "string",
@@ -744,7 +907,14 @@
           "cap_cents",
           "utilization",
           "scarce",
+          "org_cap_applied",
           "rationed",
+          "boost_active",
+          "boost_multiple",
+          "at_cap",
+          "at_floor",
+          "degraded",
+          "ruleset_version",
           "demand_hours",
           "supply_hours",
           "supply_clamped",
@@ -905,6 +1075,69 @@
           "pain_by_order"
         ],
         "title": "RoundOut"
+      },
+      "RulesetDetailOut": {
+        "properties": {
+          "engine_version": {
+            "type": "string",
+            "title": "Engine Version"
+          },
+          "version": {
+            "type": "string",
+            "title": "Version"
+          },
+          "sha256": {
+            "type": "string",
+            "title": "Sha256",
+            "description": "Integrity hash. customer_visible.sha256 is false."
+          },
+          "active": {
+            "type": "boolean",
+            "title": "Active"
+          },
+          "effective_from": {
+            "type": "string",
+            "title": "Effective From"
+          },
+          "changelog": {
+            "$ref": "#/components/schemas/ChangelogOut"
+          },
+          "public_summary": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Public Summary"
+          },
+          "customer_visible": {
+            "additionalProperties": {
+              "type": "boolean"
+            },
+            "type": "object",
+            "title": "Customer Visible"
+          },
+          "parameters": {
+            "items": {
+              "$ref": "#/components/schemas/ParameterOut"
+            },
+            "type": "array",
+            "title": "Parameters"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "engine_version",
+          "version",
+          "sha256",
+          "active",
+          "effective_from",
+          "changelog",
+          "public_summary",
+          "customer_visible",
+          "parameters"
+        ],
+        "title": "RulesetDetailOut"
       },
       "RulesetEntry": {
         "properties": {

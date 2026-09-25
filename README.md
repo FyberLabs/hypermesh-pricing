@@ -46,7 +46,20 @@ Before the round closes:
 
 Day-ahead is `POST /v1/rounds/day-ahead` once per block. Each pool must include `offered_hours`. Supply above 75% of that offer is clamped. Unsold day-ahead hours are Panopticon's to add into the real-time `supply_hours`; this service does not keep them.
 
-Auth is `Authorization: Bearer $PRICING_SERVICE_TOKEN`. `GET /healthz` does not require it. `GET /v1/rulesets` lists published versions and their sha256.
+Auth is `Authorization: Bearer $PRICING_SERVICE_TOKEN`. `GET /healthz` does not require it. `GET /v1/rulesets` lists published versions and their sha256 for operators. Dashboards use the endpoints in the transparency contract below, not that list: its `source` string names the simulator and is not customer copy.
+
+## Transparency contract
+
+Renter and host dashboards show the rules that are actually in force.
+
+- Display the active ruleset version from `GET /v1/rulesets/active`, its `public_summary`, and only parameters with `customer_visible: true`. `GET /v1/rulesets/{version}` is the same document for one published version, including one that has been announced and is not yet active.
+- The summary lines are generated from the parameter values and stored in the ruleset file. A file whose lines do not match those values is rejected, so the sentences cannot drift from the knobs.
+- Display the per-pool flags on each round: `boost_active`, `boost_multiple`, `at_cap`, `at_floor`, `scarce`, `org_cap_applied`, `degraded`, and `ruleset_version`. Those say why the live price is what it is. `at_floor` means the live price is on the floor-based reserve. `at_cap` means it is at or above the spike cap. `boost_active` means the boost multiple is above 1.
+- Announce a rule change with `effective_from` before that time. Publishing the file does not make it the active ruleset. `GET /v1/rulesets/active` returns the latest published ruleset whose `effective_from` is at or before now. A round that names `ruleset_version` uses that version. A round that omits it uses the ruleset active at `round_start` (or at request time when `round_start` is omitted).
+- Receipts carry `ruleset_version` (on the round and on each pool). A rule change never re-prices a cleared round. Panopticon must not resubmit a cleared `round_id` under a different ruleset.
+- Do not show customers the sha256, the simulator source note, lottery numbers, or another organization's orders. The ruleset document does not contain those. The round response is internal: it includes every fill so Panopticon can settle, and the dashboard filters to the caller.
+
+`customer_visible` on the envelope marks `version`, `effective_from`, `changelog`, `public_summary`, and `active` as safe. `sha256` is not. The tuning numbers in the summary are the simulated defaults from market-sim (seed 5547), stated here as the rules customers are under. They are not measured Fyber prices.
 
 ## Degraded mode
 
@@ -55,7 +68,7 @@ Panopticon implements this when the service does not answer. The pricing service
 - Hold the last base per pool.
 - Recompute the floor and reserve locally with the **pinned** `pricing_core` (the same ruleset version stamped on the last good round).
 - Clamp the base at or above that reserve.
-- Mark the round degraded.
+- Mark the round degraded. Pass `degraded: true` on the local library call so each pool flag is true. The HTTP API does not accept that field: a response from the service is not a degraded round, and every pool comes back with `degraded: false`.
 - Skip day-ahead.
 - Never go below the floor.
 - Alert after 2 degraded rounds in a row.
@@ -64,8 +77,8 @@ A degraded round still uses integer cents and still ceilings the reserve. It doe
 
 ## Versioning
 
-- A ruleset version is chosen per round and stamped on the response.
-- A new ruleset takes effect only at a round boundary. Panopticon must not resubmit a cleared `round_id` under a different ruleset. This service cannot see that history; it will happily price whatever it is sent, and the same inputs always produce the same price.
+- A ruleset version is chosen per round and stamped on the response and on each pool.
+- A new ruleset takes effect only at a round boundary, and not before its `effective_from`. Panopticon must not resubmit a cleared `round_id` under a different ruleset. This service cannot see that history; it will happily price whatever it is sent, and the same inputs (including an explicit `ruleset_version`) always produce the same price.
 - A published ruleset file does not change. `tests/test_ruleset.py` pins the sha256 of `rulesets/2026-09-25.1.json`. A tuning change is a new file such as `rulesets/2026-09-25.2.json`, added to `PUBLISHED_VERSIONS`.
 - `engine_version` is the package version (`0.1.0`). It moves when the code moves, even if the ruleset does not.
 

@@ -14,7 +14,7 @@ Pass the boost object returned by the previous round unchanged.
 
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import datetime, timezone
 from decimal import Decimal
 
 from pricing_core import ENGINE_VERSION
@@ -29,7 +29,7 @@ from pricing_core.controller import corridor_cap_cents, update_base_cents, updat
 from pricing_core.floor import quote_floor, reserve_cents
 from pricing_core.money import cents_to_dollars, dec_str, parse_decimal
 from pricing_core.orders import Order, PainState, Rung, apply_pain
-from pricing_core.ruleset import Ruleset, RulesetError, load_ruleset
+from pricing_core.ruleset import Ruleset, RulesetError, active_version, load_ruleset
 
 class EngineError(ValueError):
     """The round request is not a valid input for this ruleset."""
@@ -89,6 +89,7 @@ def _price_round(payload: dict, ruleset: Ruleset | None, *, day_ahead: bool) -> 
     rules = _rules(payload, ruleset)
     round_id = _required_str(payload, "round_id")
     _parse_round_start(payload.get("round_start"))
+    degraded = _degraded_flag(payload)
     pools_in = payload.get("pools")
     orders_in = payload.get("orders")
     if not isinstance(pools_in, list) or not pools_in:
@@ -154,7 +155,14 @@ def _price_round(payload: dict, ruleset: Ruleset | None, *, day_ahead: bool) -> 
                 "cap_cents": item["cap_cents"],
                 "utilization": dec_str(util),
                 "scarce": scarce,
+                "org_cap_applied": bool(stats.org_cap_applied),
                 "rationed": bool(scarce and item["posted_base_cents"] >= item["cap_cents"]),
+                "boost_active": item["boost"].applied > Decimal(1),
+                "boost_multiple": dec_str(item["boost"].applied),
+                "at_cap": item["posted_base_cents"] >= item["cap_cents"],
+                "at_floor": item["posted_base_cents"] == item["reserve_cents"],
+                "degraded": degraded,
+                "ruleset_version": rules.version,
                 "demand_hours": dec_str(stats.demand),
                 "supply_hours": dec_str(stats.supply),
                 "supply_clamped": item["supply_clamped"],
@@ -466,9 +474,40 @@ def _rules(payload: dict, ruleset: Ruleset | None) -> Ruleset:
         return ruleset
     version = payload.get("ruleset_version")
     try:
-        return load_ruleset(None if version in (None, "") else str(version))
+        if version not in (None, ""):
+            return load_ruleset(str(version))
+        return load_ruleset(active_version(_as_of(payload.get("round_start"))))
     except RulesetError as exc:
         raise EngineError(str(exc)) from exc
+
+
+def _as_of(round_start: object) -> datetime:
+    """When the caller omits ``ruleset_version``, select the ruleset in force.
+
+    ``round_start`` makes that choice deterministic for the round. With no
+    timestamp, the choice is the ruleset active at request time. An explicit
+    version always wins, including one announced but not yet effective.
+    """
+    if round_start is None:
+        return datetime.now(timezone.utc)
+    if not isinstance(round_start, str) or not round_start:
+        raise EngineError("round_start must be an ISO-8601 string")
+    parsed = _parse_round_start(round_start)
+    assert parsed is not None
+    return parsed
+
+
+def _degraded_flag(payload: dict) -> bool:
+    """Library-only. The HTTP schema does not accept this field.
+
+    A successful service response is never degraded. Panopticon sets the
+    flag when it prices locally because the service did not answer.
+    """
+    if "degraded" not in payload or payload["degraded"] is None:
+        return False
+    if not isinstance(payload["degraded"], bool):
+        raise EngineError("degraded must be a boolean")
+    return payload["degraded"]
 
 
 def _required_str(raw: dict, key: str) -> str:
@@ -511,13 +550,16 @@ def _as_cents(value: object, label: str) -> int:
     return value
 
 
-def _parse_round_start(value: object) -> None:
+def _parse_round_start(value: object) -> datetime | None:
     if value is None:
-        return
+        return None
     if not isinstance(value, str) or not value:
         raise EngineError("round_start must be an ISO-8601 string")
     try:
-        datetime.fromisoformat(value.replace("Z", "+00:00"))
+        parsed = datetime.fromisoformat(value.replace("Z", "+00:00"))
     except ValueError as exc:
         raise EngineError("round_start must be an ISO-8601 string") from exc
+    if parsed.tzinfo is None:
+        parsed = parsed.replace(tzinfo=timezone.utc)
+    return parsed.astimezone(timezone.utc)
 

@@ -273,6 +273,7 @@ def test_realtime_ignores_arrival_order_and_share_cap_binds():
     assert shares["whale"] == Decimal(2)
     assert sum(shares.values()) == Decimal(8)
     assert capped.pools["H"].scarce is True
+    assert capped.pools["H"].org_cap_applied is True
 
 
 def test_never_clears_below_reserve_or_above_max():

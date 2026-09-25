@@ -1,10 +1,19 @@
 {
-  "description": "Schema for a published pricing ruleset. Checked by pricing_core.ruleset.validate_ruleset. The platform fee (take) is forbidden.",
+  "description": "Schema for a published pricing ruleset. Checked by pricing_core.ruleset.validate_ruleset. The platform fee (take) is forbidden. public.lines must equal the sentences generated from the parameters.",
   "type": "object",
-  "required": ["version", "source", "floor", "boost", "controller", "market"],
+  "required": ["version", "source", "effective_from", "changelog", "public", "floor", "boost", "controller", "market"],
   "properties": {
     "version": {"type": "string"},
     "source": {"type": "string"},
+    "effective_from": {"type": "string"},
+    "changelog": {
+      "type": "object",
+      "required": ["previous_version", "summary"]
+    },
+    "public": {
+      "type": "object",
+      "required": ["lines"]
+    },
     "floor": {
       "type": "object",
       "required": ["depreciation_years", "hours_per_year", "u_min", "u_max", "u_default", "residual_default"]

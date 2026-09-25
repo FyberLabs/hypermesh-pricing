@@ -12,10 +12,12 @@ import hashlib
 import json
 import os
 from dataclasses import dataclass
+from datetime import datetime, timezone
 from decimal import Decimal
 from pathlib import Path
 
 from pricing_core.money import D, parse_decimal
+from pricing_core.transparency import choose_active, customer_visible, known_parameter_paths, public_lines
 
 # Bump only by shipping a new file. Tests pin the bytes of each published name.
 PUBLISHED_VERSIONS = ("2026-09-25.1",)
@@ -75,9 +77,38 @@ def file_sha256(path: Path) -> str:
     return digest.hexdigest()
 
 
+def active_version(as_of: datetime, *, root: Path | None = None) -> str:
+    """Published ruleset in force at ``as_of``.
+
+    A file whose ``effective_from`` is later than ``as_of`` is published
+    for announcement and is not selected. Callers that name a version
+    explicitly still get that version.
+    """
+    if as_of.tzinfo is None:
+        raise RulesetError("as_of must be timezone-aware")
+    directory = root or ruleset_dir()
+    entries: list[tuple[str, datetime]] = []
+    for version in PUBLISHED_VERSIONS:
+        path = directory / f"{version}.json"
+        if not path.is_file():
+            continue
+        loaded = load_ruleset(version, root=directory)
+        entries.append((version, parse_effective_from(loaded.raw["effective_from"])))
+    try:
+        return choose_active(entries, as_of)
+    except ValueError as exc:
+        raise RulesetError(str(exc)) from exc
+
+
 def load_ruleset(version: str | None = None, *, root: Path | None = None) -> Ruleset:
-    """Load one published ruleset. ``None`` selects the default version."""
-    chosen = version or PUBLISHED_VERSIONS[-1]
+    """Load one published ruleset.
+
+    ``None`` selects the ruleset active at the current UTC time, which
+    skips a version that has been published but is not yet effective.
+    """
+    if version is None:
+        version = active_version(datetime.now(timezone.utc), root=root)
+    chosen = version
     if chosen not in PUBLISHED_VERSIONS:
         raise RulesetError(f"unknown ruleset version {chosen!r}")
     directory = root or ruleset_dir()
@@ -117,7 +148,20 @@ def validate_ruleset(raw: object) -> None:
         raise RulesetError("ruleset must be a JSON object")
     if "take" in raw or "take" in raw.get("market", {}) or "take" in raw.get("floor", {}):
         raise RulesetError("ruleset must not bake in a platform fee; pass take per call")
-    _require_keys(raw, ["version", "source", "floor", "boost", "controller", "market"])
+    _require_keys(
+        raw,
+        [
+            "version",
+            "source",
+            "effective_from",
+            "changelog",
+            "public",
+            "floor",
+            "boost",
+            "controller",
+            "market",
+        ],
+    )
     if not isinstance(raw["version"], str) or not raw["version"]:
         raise RulesetError("version must be a non-empty string")
     source = raw["source"]
@@ -215,6 +259,50 @@ def validate_ruleset(raw: object) -> None:
         raise RulesetError("market.smoothing_alpha must be in (0, 1]")
     if not isinstance(market["day_ahead_upgrade"], bool):
         raise RulesetError("market.day_ahead_upgrade must be a boolean")
+    _check_transparency(raw)
+
+
+def parse_effective_from(value: object) -> datetime:
+    if not isinstance(value, str) or not value:
+        raise RulesetError("effective_from must be an ISO-8601 timestamp")
+    try:
+        parsed = datetime.fromisoformat(value.replace("Z", "+00:00"))
+    except ValueError as exc:
+        raise RulesetError("effective_from must be an ISO-8601 timestamp") from exc
+    if parsed.tzinfo is None:
+        raise RulesetError("effective_from must include a timezone")
+    return parsed.astimezone(timezone.utc)
+
+
+def _check_transparency(raw: dict) -> None:
+    parse_effective_from(raw["effective_from"])
+    changelog = raw["changelog"]
+    if not isinstance(changelog, dict):
+        raise RulesetError("changelog must be an object")
+    _require_keys(changelog, ["previous_version", "summary"])
+    previous = changelog["previous_version"]
+    if previous is not None and (
+        not isinstance(previous, str) or not previous or previous == raw["version"]
+    ):
+        raise RulesetError("changelog.previous_version must be null or a different version")
+    summary = changelog["summary"]
+    if not isinstance(summary, str) or not summary.strip():
+        raise RulesetError("changelog.summary must be a non-empty string")
+    public = raw["public"]
+    if not isinstance(public, dict):
+        raise RulesetError("public must be an object")
+    lines = public.get("lines")
+    if not isinstance(lines, list) or not lines or any(not isinstance(line, str) or not line.strip() for line in lines):
+        raise RulesetError("public.lines must be a non-empty list of strings")
+    expected = public_lines(raw)
+    if list(lines) != expected:
+        raise RulesetError("public lines do not match the parameters")
+    for section in ("floor", "boost", "controller", "market"):
+        for key in raw[section]:
+            path = f"{section}.{key}"
+            if path not in known_parameter_paths():
+                raise RulesetError(f"unclassified parameter {path}")
+            customer_visible(path, raw)
 
 
 def _section(raw: dict, key: str) -> dict:

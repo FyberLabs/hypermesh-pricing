@@ -104,6 +104,15 @@ def test_realtime_day_ahead_and_rulesets(client: TestClient):
     assert pool["base_cents"] >= pool["reserve_cents"]
     assert pool["next_base_cents"] >= pool["reserve_cents"]
     assert pool["next_base_cents"] <= pool["cap_cents"]
+    assert pool["ruleset_version"] == body["ruleset_version"]
+    assert pool["degraded"] is False
+    assert pool["at_floor"] is True
+    assert pool["at_cap"] is False
+    assert pool["scarce"] is False
+    assert pool["org_cap_applied"] is False
+    assert pool["boost_active"] is True
+    assert pool["boost_multiple"] == "1.3"
+    assert "lottery" not in pool
     assert {fill["order_id"] for fill in body["fills"]} == {"E", "C"}
     for fill in body["fills"]:
         assert fill["pay_cents"] >= pool["reserve_cents"]
@@ -130,6 +139,38 @@ def test_realtime_day_ahead_and_rulesets(client: TestClient):
     )
     assert missing.status_code == 404
 
+    active = client.get("/v1/rulesets/active", headers=_auth())
+    assert active.status_code == 200, active.text
+    card = active.json()
+    named = client.get("/v1/rulesets/2026-09-25.1", headers=_auth())
+    assert named.status_code == 200, named.text
+    assert named.json() == card
+    assert card["version"] == "2026-09-25.1"
+    assert card["active"] is True
+    assert card["effective_from"] == "2026-09-25T00:00:00Z"
+    assert card["changelog"]["previous_version"] is None
+    assert card["customer_visible"]["public_summary"] is True
+    assert card["customer_visible"]["sha256"] is False
+    assert "Prices move at most 2.5% per 15 minutes" in card["public_summary"]
+    visible = {row["path"]: row for row in card["parameters"]}
+    assert visible["controller.delta"]["customer_visible"] is True
+    assert visible["controller.delta"]["value"] == "0.025"
+    assert visible["market.max_passes"]["customer_visible"] is False
+    assert visible["boost.hysteresis"]["customer_visible"] is False
+    dumped = json.dumps(card)
+    assert "5547" not in dumped
+    assert "seed" not in dumped.lower()
+    assert "lottery" not in card
+    assert "orders" not in card
+    unknown = client.get("/v1/rulesets/1999-01-01.0", headers=_auth())
+    assert unknown.status_code == 404
+    labeled = client.post(
+        "/v1/rounds/realtime",
+        json={**_round(day_ahead=False), "degraded": True},
+        headers=_auth(),
+    )
+    assert labeled.status_code == 422
+
 
 def test_openapi_document_matches_the_app(client: TestClient):
     generated = client.app.openapi()
@@ -139,6 +180,8 @@ def test_openapi_document_matches_the_app(client: TestClient):
     for route in (
         "/healthz",
         "/v1/rulesets",
+        "/v1/rulesets/active",
+        "/v1/rulesets/{version}",
         "/v1/floors",
         "/v1/rounds/realtime",
         "/v1/rounds/day-ahead",

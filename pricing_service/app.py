@@ -18,8 +18,17 @@ from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 
 from pricing_core import ENGINE_VERSION
 from pricing_core.engine import EngineError, price_day_ahead, price_floor, price_realtime
-from pricing_core.ruleset import PUBLISHED_VERSIONS, RulesetError, list_rulesets
-from pricing_service.schemas import FloorIn, FloorOut, HealthOut, RoundIn, RoundOut, RulesetListOut
+from pricing_core.ruleset import RulesetError, active_version, list_rulesets, load_ruleset
+from pricing_core.transparency import ruleset_document, utc_now
+from pricing_service.schemas import (
+    FloorIn,
+    FloorOut,
+    HealthOut,
+    RoundIn,
+    RoundOut,
+    RulesetDetailOut,
+    RulesetListOut,
+)
 
 TOKEN_ENV = "PRICING_SERVICE_TOKEN"
 _bearer = HTTPBearer(
@@ -42,7 +51,9 @@ def create_app() -> FastAPI:
         description=(
             "Stateless internal pricing engine. Tuning values in the published "
             "ruleset are Simulated (market-sim seed 5547), not measured Fyber prices. "
-            "The platform fee is a per-request take; the ruleset does not set one."
+            "The platform fee is a per-request take; the ruleset does not set one. "
+            "GET /v1/rulesets/active is the customer-facing rules card: show "
+            "public_summary and parameters marked customer_visible."
         ),
         openapi_url="/openapi.json",
     )
@@ -76,14 +87,48 @@ def create_app() -> FastAPI:
             loaded = list_rulesets()
         except RulesetError as exc:
             return JSONResponse(status_code=500, content={"detail": str(exc)})
+        try:
+            default = active_version(utc_now())
+        except RulesetError as exc:
+            return JSONResponse(status_code=500, content={"detail": str(exc)})
         return RulesetListOut(
             engine_version=ENGINE_VERSION,
-            default=PUBLISHED_VERSIONS[-1],
+            default=default,
             rulesets=[
                 {"version": item.version, "sha256": item.sha256, "source": item.source}
                 for item in loaded
             ],
         )
+
+    @app.get(
+        "/v1/rulesets/active",
+        response_model=RulesetDetailOut,
+        dependencies=[Depends(_documented_bearer)],
+    )
+    def ruleset_active() -> Any:
+        try:
+            loaded = load_ruleset(active_version(utc_now()))
+        except RulesetError as exc:
+            status = 404 if "no ruleset is effective" in str(exc) or "unknown ruleset" in str(exc) else 500
+            return JSONResponse(status_code=status, content={"detail": str(exc)})
+        return ruleset_document(loaded, active=True)
+
+    @app.get(
+        "/v1/rulesets/{version}",
+        response_model=RulesetDetailOut,
+        dependencies=[Depends(_documented_bearer)],
+    )
+    def ruleset_by_version(version: str) -> Any:
+        try:
+            loaded = load_ruleset(version)
+        except RulesetError as exc:
+            status = 404 if "not found" in str(exc) or "unknown ruleset" in str(exc) else 500
+            return JSONResponse(status_code=status, content={"detail": str(exc)})
+        try:
+            current = active_version(utc_now())
+        except RulesetError:
+            current = None
+        return ruleset_document(loaded, active=loaded.version == current)
 
     @app.post("/v1/floors", response_model=FloorOut, dependencies=[Depends(_documented_bearer)])
     def floors(body: FloorIn) -> Any:

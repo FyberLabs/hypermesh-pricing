@@ -12,7 +12,7 @@ from pricing_core.ruleset import RulesetError, load_ruleset, ruleset_dir, valida
 
 # Frozen bytes of rulesets/2026-09-25.1.json. A tuning change is a new version
 # file, not an edit of this one.
-PINNED_SHA256 = "3557889ccb88d5886ccac3519e01af5d1472ea30b6f08297b78bf07d04a8b40c"
+PINNED_SHA256 = "d4a9eccef77ffd0618b1a148520bf3e34d12ae195cce2b2a94a017d1bf34e662"
 ROOT = Path(__file__).resolve().parents[1]
 
 
