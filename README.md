@@ -106,4 +106,4 @@ MARKET_SIM_PATH=/path/to/market-sim python scripts/regenerate_fixtures.py
 
 ## License
 
-This repository does not include a license file yet. Chris will choose one.
+MIT. Copyright 2026 Fyber Labs. See `LICENSE`.
