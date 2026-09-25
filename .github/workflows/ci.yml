@@ -4,11 +4,10 @@ on:
   push:
   pull_request:
 
-# This repository is private. Jobs run on the org's self-hosted runners,
-# never on GitHub-hosted runners. There is no deploy job in v0.1.
+# Public repository. Jobs run on GitHub-hosted runners. There is no deploy job.
 jobs:
   pytest:
-    runs-on: [self-hosted, linux, x64]
+    runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -21,7 +20,7 @@ jobs:
           python -m pytest
 
   image:
-    runs-on: [self-hosted, linux, x64]
+    runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
       - name: Build image

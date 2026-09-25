@@ -2,7 +2,7 @@
   "openapi": "3.1.0",
   "info": {
     "title": "Hypermesh pricing",
-    "description": "Stateless internal pricing engine. Tuning values in the published ruleset are Simulated (market-sim seed 5547), not measured Fyber prices. The platform fee is a per-request take; the ruleset does not set one. GET /v1/rulesets/active is the customer-facing rules card: show public_summary and parameters marked customer_visible.",
+    "description": "Stateless pricing engine. Tuning values in the published ruleset are simulated defaults from the private market-sim reference, not measured prices. The platform fee is a per-request take; the ruleset does not set one. GET /v1/rulesets/active is the customer-facing rules card: show public_summary and parameters marked customer_visible.",
     "version": "0.1.0"
   },
   "paths": {

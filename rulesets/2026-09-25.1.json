@@ -1,6 +1,6 @@
 {
   "version": "2026-09-25.1",
-  "source": "Simulated defaults from FyberLabs/market-sim (seed 5547) and the 2026-09-25 pricing memos. Not measured Fyber prices, utilization, or revenue. The platform fee (take) is not set here.",
+  "source": "Simulated defaults from the private market-sim reference (seed 5547) and the 2026-09-25 pricing memos. Not measured prices, utilization, or revenue. The platform fee (take) is not set here.",
   "effective_from": "2026-09-25T00:00:00Z",
   "changelog": {
     "previous_version": null,

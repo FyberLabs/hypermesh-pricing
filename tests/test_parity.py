@@ -1,23 +1,15 @@
-"""pricing_core matches the market-sim snapshot within one cent.
+"""pricing_core matches committed market-sim fixtures within one cent.
 
-The snapshot under tests/reference is FyberLabs/market-sim commit
-df06a32363342b0ef6b8753376686eb8bb8850bb. Figures are simulated.
+The fixtures are simulated outputs. CI does not fetch the private
+market-sim reference. Regenerate them locally with
+scripts/regenerate_fixtures.py when you have a checkout.
 """
 
 from __future__ import annotations
 
+import json
 from decimal import Decimal
-
-import pytest
-from market_sim.clearing import PoolView as SimPool
-from market_sim.clearing import clear_day_ahead as sim_day_ahead
-from market_sim.clearing import clear_realtime as sim_realtime
-from market_sim.controller import corridor_cap, step_base
-from market_sim.floor import conditional_floor_boost as sim_boost
-from market_sim.floor import floor_per_hour, reserve_per_hour
-from market_sim.orders import Order as SimOrder
-from market_sim.orders import Rung as SimRung
-from market_sim.upgrade import commit_upgrade_pass as sim_upgrade
+from pathlib import Path
 
 from pricing_core.boost import conditional_floor_boost
 from pricing_core.clearing import PoolView, clear_day_ahead, clear_realtime, commit_upgrade_pass
@@ -26,308 +18,114 @@ from pricing_core.engine import price_day_ahead, price_realtime
 from pricing_core.floor import floor_dollars, reserve_dollars
 from pricing_core.orders import Order, Rung
 
+FIXTURES = Path(__file__).resolve().parent / "fixtures"
 U_MIN = Decimal("0.30")
 U_MAX = Decimal("0.70")
 
 
-def _near(cents: int, dollars: float) -> None:
-    assert abs(cents - dollars * 100) <= 1.0 + 1e-6
-
-
-def _cents(dollars: float) -> int:
-    return int((Decimal(str(dollars)) * 100).to_integral_value())
-
-
-def _core_order(order: SimOrder) -> Order:
-    return Order(
-        order_id=order.order_id,
-        org_id=order.org_id,
-        rungs=tuple(
-            Rung(
-                pool_id=rung.pool_id,
-                max_cents=_cents(rung.max_price),
-                willingness_cents=_cents(rung.willingness),
-            )
-            for rung in order.rungs
-        ),
-        hours=Decimal(str(order.quantity)),
-        tip_cents=_cents(order.tip),
-        tier_rank=order.tier_rank,
-        lottery=order.lottery,
-        kind=order.kind,
-    )
-
-
-def _core_pools(pools: dict[str, SimPool]) -> dict[str, PoolView]:
-    return {
-        pid: PoolView(
-            pid,
-            supply=Decimal(str(pool.supply)),
-            base_cents=_cents(pool.base),
-            reserve_cents=_cents(pool.reserve),
-        )
-        for pid, pool in pools.items()
-    }
-
-
-def _sim_rung(pool: str, price: float) -> SimRung:
-    return SimRung(pool, max_price=price, willingness=price)
-
-
-def _sim_order(oid, org, rungs, tip=0.0, lottery=0, qty=1.0) -> SimOrder:
-    return SimOrder(oid, org, tuple(rungs), quantity=qty, tip=tip, lottery=lottery)
-
-
-def _sim_pools(**specs) -> dict[str, SimPool]:
-    return {
-        pid: SimPool(pid, supply=supply, base=base, reserve=reserve)
-        for pid, (supply, base, reserve) in specs.items()
-    }
-
-
-def _assert_fills(core_fills, sim_fills) -> None:
-    core = {(fill.order_id, fill.pool_id): fill for fill in core_fills}
-    sim = {(fill.order_id, fill.pool_id): fill for fill in sim_fills}
-    assert set(core) == set(sim)
-    for key, sim_fill in sim.items():
-        got = core[key]
-        _near(got.pay_cents, sim_fill.pay_per_hour)
-        assert abs(float(got.hours) - sim_fill.quantity) <= 1e-9
-        assert got.rung_index == sim_fill.rung_index
-
-
-def test_floor_matches_market_sim_within_a_cent():
-    rows = [
-        (0.070, 0.1834, 1.05, 1999),
-        (0.80, 0.1834, 1.05, 4500),
-        (1.275, 0.1419, 1.3, 35625),
-        (130, 0.1419, 1.2, 3_000_000),
-    ]
-    for kw, tariff, overhead, capex in rows:
-        sim_floor = floor_per_hour(kw, tariff, overhead, capex, 0.0, 0.50, 0.0)
-        sim_reserve = reserve_per_hour(sim_floor, 0.08, 1.3)
+def test_floor_matches_the_fixture_within_a_cent():
+    for case in _load("floor.json")["cases"]:
+        spec = case["input"]
         floor, _u = floor_dollars(
-            Decimal(str(kw)),
-            Decimal(str(tariff)),
-            Decimal(str(overhead)),
-            Decimal(capex),
-            Decimal(0),
-            Decimal("0.50"),
-            Decimal(0),
+            Decimal(spec["loaded_kw"]),
+            Decimal(spec["tariff_per_kwh"]),
+            Decimal(spec["overhead"]),
+            Decimal(spec["capex"]),
+            Decimal(spec["residual"]),
+            Decimal(spec["u"]),
+            Decimal(spec["host_margin"]),
             years=Decimal(3),
             hours_per_year=Decimal(8760),
             u_min=U_MIN,
             u_max=U_MAX,
         )
-        reserve = reserve_dollars(floor, Decimal("0.08"), Decimal("1.3"))
-        assert abs(float(floor) - sim_floor) < 1e-9
-        assert abs(float(reserve) - sim_reserve) < 1e-9
+        reserve = reserve_dollars(floor, Decimal(spec["take"]), Decimal(spec["boost"]))
+        assert abs(float(floor) - float(case["expected"]["floor"])) < 1e-9
+        assert abs(float(reserve) - float(case["expected"]["reserve"])) < 1e-9
 
 
-def test_boost_schedule_matches_market_sim():
-    for u in (0, 0.35, 0.40, 0.45, 0.55, 0.9, 1):
-        sim = sim_boost(u, 1.3, 0.35, 0.55, hysteresis=0.03, direction=1)
+def test_boost_schedule_matches_the_fixture():
+    for case in _load("boost.json")["cases"]:
+        spec = case["input"]
         got = conditional_floor_boost(
-            Decimal(str(u)),
-            Decimal("1.3"),
-            Decimal("0.35"),
-            Decimal("0.55"),
-            hysteresis=Decimal("0.03"),
-            direction=1,
+            Decimal(spec["utilization"]),
+            Decimal(spec["b_max"]),
+            Decimal(spec["u_low"]),
+            Decimal(spec["u_high"]),
+            hysteresis=Decimal(spec["hysteresis"]),
+            direction=spec["direction"],
         )
-        assert abs(float(got) - sim) < 1e-12
+        assert abs(float(got) - float(case["expected"])) < 1e-12
 
 
-def test_controller_matches_market_sim_within_a_cent():
-    cases = [
-        (1.00, 1.0, 0.025, 0.50, 10.0),
-        (0.40, 4 / 6, 0.10, 0.01, 10.0),
-        (2.00, 0.0, 0.025, 1.00, 8.0),
-        (1.00, 1.0, 0.025, 1.00, 3.00),
-    ]
-    for base, util, delta, reserve, cap in cases:
-        sim = step_base(base, util, 0.70, delta, reserve, cap)
+def test_controller_matches_the_fixture_within_a_cent():
+    body = _load("controller.json")["cases"]
+    for case in body["steps"]:
+        spec = case["input"]
         got = step_base_cents(
-            _cents(base),
-            Decimal(str(util)),
-            Decimal("0.70"),
-            Decimal(str(delta)),
-            _cents(reserve),
-            _cents(cap),
+            _cents(spec["base"]),
+            Decimal(spec["utilization"]),
+            Decimal(spec["target"]),
+            Decimal(spec["delta"]),
+            _cents(spec["reserve"]),
+            _cents(spec["cap"]),
         )
-        _near(got, sim)
-        assert got >= _cents(reserve)
-    sim_cap = corridor_cap(1.0, [2.0, 3.0, 4.0], kappa=3, lambda_cap=1.5)
-    # Median of 2, 3, 4 is 3. λ 1.5 → 4.5, above κ 3.
-    got_cap = corridor_cap_cents(100, _cents(3.0), Decimal(3), Decimal("1.5"))
-    _near(got_cap, sim_cap)
-
-
-def test_illustrative_realtime_matches_market_sim():
-    sim_orders = [
-        _sim_order("A", "A", [_sim_rung("H", 1.50)], lottery=2),
-        _sim_order("B", "B", [_sim_rung("H", 1.20), _sim_rung("L", 0.60)], lottery=3),
-        _sim_order("C", "C", [_sim_rung("H", 1.10), _sim_rung("L", 0.50)], tip=0.05, lottery=11),
-        _sim_order("D", "D", [_sim_rung("H", 0.90), _sim_rung("L", 0.50)], lottery=4),
-        _sim_order("E", "E", [_sim_rung("H", 1.30)], tip=0.10, lottery=10),
-        _sim_order("F", "F", [_sim_rung("H", 1.05), _sim_rung("L", 0.45)], lottery=1),
-        _sim_order("G", "G", [_sim_rung("L", 0.70)], lottery=5),
-        _sim_order("J", "J", [_sim_rung("L", 0.42)], lottery=6),
-    ]
-    sim_pools = _sim_pools(H=(4, 1.00, 0.01), L=(6, 0.40, 0.01))
-    sim = sim_realtime(sim_orders, sim_pools, share_cap=0.25, tip_cap=0.10)
-    core = clear_realtime(
-        [_core_order(order) for order in sim_orders],
-        _core_pools(sim_pools),
-        share_cap=Decimal("0.25"),
-        tip_cap=Decimal("0.10"),
+        _near(got, case["expected"])
+        assert got >= _cents(spec["reserve"])
+    corridor = body["corridor"]
+    prices = [Decimal(price) for price in corridor["input"]["day_ahead_prices"]]
+    ordered = sorted(prices)
+    mid = len(ordered) // 2
+    median = ordered[mid] if len(ordered) % 2 == 1 else (ordered[mid - 1] + ordered[mid]) / 2
+    got_cap = corridor_cap_cents(
+        _cents(corridor["input"]["reserve"]),
+        _cents(median),
+        Decimal(corridor["input"]["kappa"]),
+        Decimal(corridor["input"]["lambda"]),
     )
-    _assert_fills(core.fills, sim.fills)
-    assert core.passes == sim.passes
-    assert core.pools["H"].scarce is sim.pools["H"].scarce
+    _near(got_cap, corridor["expected"])
 
 
-def test_day_ahead_and_upgrade_match_market_sim():
-    sim_orders = [
-        _sim_order("Big", "Big", [_sim_rung("X", 9.0)], lottery=1),
-        _sim_order("S", "S", [_sim_rung("X", 5.0), _sim_rung("H", 5.0)], lottery=2),
-        _sim_order("U", "U", [_sim_rung("H", 4.0), _sim_rung("L", 4.0)], lottery=3),
-        _sim_order("Other", "Other", [_sim_rung("L", 2.0)], lottery=4),
-    ]
-    sim_pools = _sim_pools(X=(1, 1.0, 1.0), H=(1, 1.0, 1.0), L=(1, 1.0, 1.0))
-    sim = sim_day_ahead(sim_orders, sim_pools, share_cap=None)
-    core_orders = [_core_order(order) for order in sim_orders]
-    core_pools = _core_pools(sim_pools)
-    core = clear_day_ahead(core_orders, core_pools, share_cap=None)
-    _assert_fills(core.fills, sim.fills)
-    sim_up, sim_gains = sim_upgrade(sim_orders, sim, sim_pools, None)
-    core_up, core_gains = commit_upgrade_pass(core_orders, core, core_pools, None)
-    assert core_gains == sim_gains
-    _assert_fills(core_up.fills, sim_up.fills)
-
-
-def test_engine_scenarios_match_market_sim_on_seeded_books():
-    # Two seeded books: the memo's illustrative real-time round, and a
-    # day-ahead block with the one-pass upgrade. Prices are exact cents.
-    realtime = price_realtime(
-        {
-            "round_id": "rt-5547",
-            "round_start": "2026-09-25T00:15:00Z",
-            "pools": [
-                _engine_pool("H", supply="4", base=100, reserve=50, hosts=8, trail="0.80"),
-                _engine_pool("L", supply="6", base=40, reserve=20, hosts=8, trail="0.50"),
-            ],
-            "orders": [
-                _engine_order("A", "A", [("H", 150)], lottery=2),
-                _engine_order("B", "B", [("H", 120), ("L", 60)], lottery=3),
-                _engine_order("C", "C", [("H", 110), ("L", 50)], tip=5, lottery=11),
-                _engine_order("D", "D", [("H", 90), ("L", 50)], lottery=4),
-                _engine_order("E", "E", [("H", 130)], tip=10, lottery=10),
-                _engine_order("F", "F", [("H", 105), ("L", 45)], lottery=1),
-                _engine_order("G", "G", [("L", 70)], lottery=5),
-                _engine_order("J", "J", [("L", 42)], lottery=6),
-            ],
-        }
+def test_illustrative_realtime_matches_the_fixture():
+    body = _load("realtime.json")["cases"]
+    result = clear_realtime(
+        _orders(body["orders"]),
+        _pools(body["pools"]),
+        share_cap=_optional_decimal(body["share_cap"]),
+        tip_cap=_optional_decimal(body["tip_cap"]),
     )
-    sim_orders = [
-        _sim_order("A", "A", [_sim_rung("H", 1.50)], lottery=2),
-        _sim_order("B", "B", [_sim_rung("H", 1.20), _sim_rung("L", 0.60)], lottery=3),
-        _sim_order("C", "C", [_sim_rung("H", 1.10), _sim_rung("L", 0.50)], tip=0.05, lottery=11),
-        _sim_order("D", "D", [_sim_rung("H", 0.90), _sim_rung("L", 0.50)], lottery=4),
-        _sim_order("E", "E", [_sim_rung("H", 1.30)], tip=0.10, lottery=10),
-        _sim_order("F", "F", [_sim_rung("H", 1.05), _sim_rung("L", 0.45)], lottery=1),
-        _sim_order("G", "G", [_sim_rung("L", 0.70)], lottery=5),
-        _sim_order("J", "J", [_sim_rung("L", 0.42)], lottery=6),
-    ]
-    sim = sim_realtime(
-        sim_orders,
-        _sim_pools(H=(4, 1.00, 0.50), L=(6, 0.40, 0.20)),
-        share_cap=0.25,
-        tip_cap=0.10,
-    )
-    pays = {fill["order_id"]: fill for fill in realtime["fills"]}
-    for fill in sim.fills:
-        got = pays[fill.order_id]
-        assert got["pool_id"] == fill.pool_id
-        _near(got["pay_cents"], fill.pay_per_hour)
-    again = price_realtime(
-        {
-            "round_id": "rt-5547",
-            "round_start": "2026-09-25T00:15:00Z",
-            "pools": list(reversed([
-                _engine_pool("H", supply="4", base=100, reserve=50, hosts=8, trail="0.80"),
-                _engine_pool("L", supply="6", base=40, reserve=20, hosts=8, trail="0.50"),
-            ])),
-            "orders": list(reversed([
-                _engine_order("A", "A", [("H", 150)], lottery=2),
-                _engine_order("B", "B", [("H", 120), ("L", 60)], lottery=3),
-                _engine_order("C", "C", [("H", 110), ("L", 50)], tip=5, lottery=11),
-                _engine_order("D", "D", [("H", 90), ("L", 50)], lottery=4),
-                _engine_order("E", "E", [("H", 130)], tip=10, lottery=10),
-                _engine_order("F", "F", [("H", 105), ("L", 45)], lottery=1),
-                _engine_order("G", "G", [("L", 70)], lottery=5),
-                _engine_order("J", "J", [("L", 42)], lottery=6),
-            ])),
-        }
-    )
-    assert again["fills"] == realtime["fills"]
-    assert again["pools"] == realtime["pools"]
-
-    ahead = price_day_ahead(
-        {
-            "round_id": "da-5547",
-            "round_start": "2026-09-25T00:00:00Z",
-            "pools": [
-                _engine_pool("X", supply="1", base=100, reserve=100, hosts=4, trail="0.20", offered="4"),
-                _engine_pool("H", supply="1", base=100, reserve=100, hosts=4, trail="0.20", offered="4"),
-                _engine_pool("L", supply="1", base=100, reserve=100, hosts=4, trail="0.20", offered="4"),
-            ],
-            "orders": [
-                _engine_order("Big", "Big", [("X", 900)], lottery=1),
-                _engine_order("S", "S", [("X", 500), ("H", 500)], lottery=2),
-                _engine_order("U", "U", [("H", 400), ("L", 400)], lottery=3),
-                _engine_order("Other", "Other", [("L", 200)], lottery=4),
-            ],
-        }
-    )
-    # A 25% cap on a 1-hour pool splits a 1-hour bid, so this request does
-    # not reproduce the simulator's share_cap=None upgrade story. That story
-    # is test_day_ahead_and_upgrade_match_market_sim. Here the engine must
-    # still stamp the ruleset, keep every price at or above the reserve, and
-    # run the upgrade pass.
-    assert ahead["upgrade_applied"] is True
-    assert all(fill["pay_cents"] >= 100 for fill in ahead["fills"])
-    assert ahead["ruleset_version"] == "2026-09-25.1"
-    assert ahead["engine_version"] == "0.1.0"
+    _assert_clearing(result, body["expected"])
 
 
-def _engine_pool(pid, *, supply, base, reserve, hosts, trail, offered=None):
-    body = {
-        "pool_id": pid,
-        "class_id": "class",
-        "region": "us-east",
-        "supply_hours": supply,
-        "n_hosts": hosts,
-        "reserve_cents": reserve,
-        "prev_base_cents": base,
-        "trailing_util_24h": trail,
-        "day_ahead_median_7d_cents": None,
-        "boost": {"applied": "1.3", "direction": 0, "prev_trail": None},
+def test_day_ahead_and_upgrade_match_the_fixture():
+    body = _load("day_ahead.json")["cases"]
+    orders = _orders(body["orders"], kind="day_ahead")
+    pools = _pools(body["pools"])
+    share = _optional_decimal(body["share_cap"])
+    result = clear_day_ahead(orders, pools, share_cap=share)
+    _assert_clearing(result, body["expected_down"])
+    upgraded, gains = commit_upgrade_pass(orders, result, pools, share)
+    assert gains == body["expected_upgrade"]["gains"]
+    _assert_fills(upgraded.fills, body["expected_upgrade"]["fills"])
+
+
+def test_engine_realtime_matches_the_fixture_and_is_deterministic():
+    body = _load("engine_realtime.json")["cases"]
+    request = body["request"]
+    priced = price_realtime(request)
+    pays = {fill["order_id"]: fill for fill in priced["fills"]}
+    for expected in body["expected_fills"]:
+        got = pays[expected["order_id"]]
+        assert got["pool_id"] == expected["pool_id"]
+        _near(got["pay_cents"], expected["pay"])
+    reversed_request = {
+        **request,
+        "pools": list(reversed(request["pools"])),
+        "orders": list(reversed(request["orders"])),
     }
-    if offered is not None:
-        body["offered_hours"] = offered
-    return body
-
-
-def _engine_order(oid, org, rungs, *, tip=0, lottery=0, hours="1"):
-    return {
-        "order_id": oid,
-        "org_id": org,
-        "lottery": lottery,
-        "tip_cents": tip,
-        "hours": hours,
-        "rungs": [{"pool_id": pool, "max_cents": cents} for pool, cents in rungs],
-    }
+    again = price_realtime(reversed_request)
+    assert again["fills"] == priced["fills"]
+    assert again["pools"] == priced["pools"]
 
 
 def test_day_ahead_share_is_clamped_at_seventy_five_percent():
@@ -335,9 +133,29 @@ def test_day_ahead_share_is_clamped_at_seventy_five_percent():
         {
             "round_id": "da-cap",
             "pools": [
-                _engine_pool("H", supply="90", base=100, reserve=100, hosts=10, trail="0.4", offered="100"),
+                {
+                    "pool_id": "H",
+                    "class_id": "class",
+                    "region": "lab",
+                    "supply_hours": "90",
+                    "n_hosts": 10,
+                    "reserve_cents": 100,
+                    "prev_base_cents": 100,
+                    "trailing_util_24h": "0.4",
+                    "offered_hours": "100",
+                    "boost": {"applied": "1.3", "direction": 0, "prev_trail": None},
+                }
             ],
-            "orders": [_engine_order("A", "A", [("H", 500)], hours="80", lottery=1)],
+            "orders": [
+                {
+                    "order_id": "A",
+                    "org_id": "A",
+                    "lottery": 1,
+                    "tip_cents": 0,
+                    "hours": "80",
+                    "rungs": [{"pool_id": "H", "max_cents": 500}],
+                }
+            ],
         }
     )
     pool = result["pools"][0]
@@ -346,3 +164,81 @@ def test_day_ahead_share_is_clamped_at_seventy_five_percent():
     assert pool["base_cents"] >= pool["reserve_cents"]
     assert pool["next_base_cents"] <= pool["cap_cents"]
     assert pool["next_base_cents"] >= pool["reserve_cents"]
+
+
+def test_fixtures_are_labeled_simulated():
+    for path in sorted(FIXTURES.glob("*.json")):
+        body = json.loads(path.read_text(encoding="utf-8"))
+        assert body["simulated"] is True
+        assert "Simulated" in body["note"]
+        assert "Not measured" in body["note"]
+
+
+def _load(name: str) -> dict:
+    return json.loads((FIXTURES / name).read_text(encoding="utf-8"))
+
+
+def _orders(specs: list[dict], *, kind: str = "realtime") -> list[Order]:
+    return [
+        Order(
+            order_id=spec["order_id"],
+            org_id=spec["org_id"],
+            rungs=tuple(
+                Rung(
+                    pool_id=rung["pool_id"],
+                    max_cents=_cents(rung["max"]),
+                    willingness_cents=_cents(rung["max"]),
+                )
+                for rung in spec["rungs"]
+            ),
+            hours=Decimal(spec["hours"]),
+            tip_cents=_cents(spec["tip"]),
+            lottery=spec["lottery"],
+            kind=kind,
+        )
+        for spec in specs
+    ]
+
+
+def _pools(specs: list[dict]) -> dict[str, PoolView]:
+    return {
+        spec["pool_id"]: PoolView(
+            spec["pool_id"],
+            supply=Decimal(spec["supply"]),
+            base_cents=_cents(spec["base"]),
+            reserve_cents=_cents(spec["reserve"]),
+        )
+        for spec in specs
+    }
+
+
+def _assert_clearing(result, expected: dict) -> None:
+    assert result.passes == expected["passes"]
+    for pool_id, scarce in expected["scarce"].items():
+        assert result.pools[pool_id].scarce is scarce
+    _assert_fills(result.fills, expected["fills"])
+
+
+def _assert_fills(core_fills, expected: list[dict]) -> None:
+    core = {(fill.order_id, fill.pool_id): fill for fill in core_fills}
+    golden = {(fill["order_id"], fill["pool_id"]): fill for fill in expected}
+    assert set(core) == set(golden)
+    for key, want in golden.items():
+        got = core[key]
+        _near(got.pay_cents, want["pay"])
+        assert abs(float(got.hours) - float(want["hours"])) <= 1e-9
+        assert got.rung_index == want["rung_index"]
+
+
+def _optional_decimal(value):
+    if value is None:
+        return None
+    return Decimal(value)
+
+
+def _cents(dollars: str) -> int:
+    return int((Decimal(dollars) * 100).to_integral_value())
+
+
+def _near(cents: int, dollars: str) -> None:
+    assert abs(cents - float(dollars) * 100) <= 1.0 + 1e-6

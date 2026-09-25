@@ -2,14 +2,9 @@
 
 Stateless pricing engine for Hypermesh. It is the external service Panopticon will call. It is versioned and deployed on its own. This repository does not change Panopticon, Stripe, or a database, and it does not deploy anything.
 
-The clearing rules come from the 2026-09-25 pricing memos in `FyberLabs/hypermesh-docs`:
+The clearing rules follow the 2026-09-25 pricing memos. The pure functions follow the private market-sim reference (`floor.py`, `controller.py`, `orders.py`, `clearing.py`, `token_pricing.py`). Every tuning value shipped in `rulesets/` is a **simulated default** from that reference (seed 5547). None of it is a measured price, utilization, or revenue.
 
-- `pricing-floor-and-bidding-2026-09-25.md`
-- `pricing-bid-process-2026-09-25.md`
-
-The pure functions follow `FyberLabs/market-sim` (`floor.py`, `controller.py`, `orders.py`, `clearing.py`, `token_pricing.py`). Every tuning value shipped in `rulesets/` is a **Simulated** default from that simulator (seed 5547). None of it is a measured Fyber price, utilization, or revenue.
-
-The platform fee (`take`) is an argument on each call. The ruleset does not contain one. Chris has not set the fee for this service. The 8% and 12% figures in the memos are not defaults here.
+The platform fee (`take`) is an argument on each call. The ruleset does not contain one. It has not been decided for this service. The 8% and 12% figures discussed in the memos are not defaults here.
 
 ## Layout
 
@@ -19,11 +14,13 @@ The platform fee (`take`) is an argument on each call. The ruleset does not cont
 | `pricing_service/` | Optional FastAPI process. Install with `pricing_core[service]`. |
 | `rulesets/2026-09-25.1.json` | Immutable tuning file. A change is a new filename. |
 | `openapi/openapi.json` | Published OpenAPI document for the service. |
-| `tests/reference/market_sim/` | Snapshot of the market-sim pure modules, for parity tests. |
+| `tests/fixtures/` | Simulated parity fixtures. CI does not fetch market-sim. |
 
 `pricing_core` imports cleanly on Panopticon's Python 3.13 and on the simulator's interpreter. It does not import FastAPI.
 
 ## What a round does
+
+The percentages and multiples in this section are simulated defaults, not measured prices.
 
 Money is integer cents. Hours and boosts are decimal strings. The same request, including lottery numbers, always returns the same response. The process stores nothing.
 
@@ -59,7 +56,7 @@ Renter and host dashboards show the rules that are actually in force.
 - Receipts carry `ruleset_version` (on the round and on each pool). A rule change never re-prices a cleared round. Panopticon must not resubmit a cleared `round_id` under a different ruleset.
 - Do not show customers the sha256, the simulator source note, lottery numbers, or another organization's orders. The ruleset document does not contain those. The round response is internal: it includes every fill so Panopticon can settle, and the dashboard filters to the caller.
 
-`customer_visible` on the envelope marks `version`, `effective_from`, `changelog`, `public_summary`, and `active` as safe. `sha256` is not. The tuning numbers in the summary are the simulated defaults from market-sim (seed 5547), stated here as the rules customers are under. They are not measured Fyber prices.
+`customer_visible` on the envelope marks `version`, `effective_from`, `changelog`, `public_summary`, and `active` as safe. `sha256` is not. The tuning numbers in the summary are simulated defaults from the private market-sim reference (seed 5547). They are not measured prices.
 
 ## Degraded mode
 
@@ -90,7 +87,7 @@ PRICING_SERVICE_TOKEN=change-me uvicorn pricing_service.app:app --host 0.0.0.0 -
 pytest
 ```
 
-The token is an environment variable. Do not commit one.
+The service token comes from the `PRICING_SERVICE_TOKEN` environment variable only. Do not commit one.
 
 The container is Alpine (`python:3.13-alpine`). FastAPI, Pydantic, and uvicorn publish musllinux wheels, so the image does not need a compiler.
 
@@ -99,4 +96,14 @@ docker build -t hypermesh-pricing:0.1.0 .
 docker run --rm -p 8080:8080 -e PRICING_SERVICE_TOKEN=change-me hypermesh-pricing:0.1.0
 ```
 
-CI (`.github/workflows/ci.yml`) runs on self-hosted runners `runs-on: [self-hosted, linux, x64]`. It runs pytest and a Docker build. There is no deploy job.
+CI (`.github/workflows/ci.yml`) runs pytest and a Docker image build on GitHub-hosted `ubuntu-latest` runners. There is no deploy job. The parity fixtures are already in the repository. CI does not fetch the private market-sim reference.
+
+To regenerate those fixtures on a machine that already has market-sim:
+
+```bash
+MARKET_SIM_PATH=/path/to/market-sim python scripts/regenerate_fixtures.py
+```
+
+## License
+
+This repository does not include a license file yet. Chris will choose one.

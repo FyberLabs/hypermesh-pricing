@@ -49,8 +49,9 @@ def create_app() -> FastAPI:
         title="Hypermesh pricing",
         version=ENGINE_VERSION,
         description=(
-            "Stateless internal pricing engine. Tuning values in the published "
-            "ruleset are Simulated (market-sim seed 5547), not measured Fyber prices. "
+            "Stateless pricing engine. Tuning values in the published "
+            "ruleset are simulated defaults from the private market-sim reference, "
+            "not measured prices. "
             "The platform fee is a per-request take; the ruleset does not set one. "
             "GET /v1/rulesets/active is the customer-facing rules card: show "
             "public_summary and parameters marked customer_visible."
