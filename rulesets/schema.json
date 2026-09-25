@@ -1,0 +1,25 @@
+{
+  "description": "Schema for a published pricing ruleset. Checked by pricing_core.ruleset.validate_ruleset. The platform fee (take) is forbidden.",
+  "type": "object",
+  "required": ["version", "source", "floor", "boost", "controller", "market"],
+  "properties": {
+    "version": {"type": "string"},
+    "source": {"type": "string"},
+    "floor": {
+      "type": "object",
+      "required": ["depreciation_years", "hours_per_year", "u_min", "u_max", "u_default", "residual_default"]
+    },
+    "boost": {
+      "type": "object",
+      "required": ["mode", "b_max", "u_low", "u_high", "hysteresis", "smooth", "window_hours", "min_hosts", "thin_plateau"]
+    },
+    "controller": {
+      "type": "object",
+      "required": ["delta", "target_util", "kappa", "lambda", "round_minutes"]
+    },
+    "market": {
+      "type": "object",
+      "required": ["tip_cap", "share_cap", "day_ahead_share_max", "max_passes", "pain_hysteresis", "smoothing_alpha", "day_ahead_upgrade"]
+    }
+  }
+}

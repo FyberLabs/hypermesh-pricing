@@ -1,0 +1,28 @@
+name: ci
+
+on:
+  push:
+  pull_request:
+
+# This repository is private. Jobs run on the org's self-hosted runners,
+# never on GitHub-hosted runners. There is no deploy job in v0.1.
+jobs:
+  pytest:
+    runs-on: [self-hosted, linux, x64]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+      - name: Install and test
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -e ".[service,test]"
+          python -m pytest
+
+  image:
+    runs-on: [self-hosted, linux, x64]
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build image
+        run: docker build -t hypermesh-pricing:ci .
