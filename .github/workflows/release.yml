@@ -70,22 +70,34 @@ jobs:
             docker tag hypermesh-pricing:candidate "${image}:${tag}"
             docker push "${image}:${tag}" | tee -a "$push_log"
           done
-          prefix="${image}@sha256:"
-          ref=""
-          digest_lines="$(docker inspect --format='{{range .RepoDigests}}{{println .}}{{end}}' "${image}:${tags[0]}")"
+          pushed=""
           while IFS= read -r line; do
             case "$line" in
-              "${prefix}"[0-9a-f]*) ref="$line"; break ;;
+              *"digest: sha256:"*)
+                one="$(printf '%s\n' "$line" | sed -n 's/.*digest: \(sha256:[0-9a-f]\{64\}\).*/\1/p')"
+                if [ -z "$one" ]; then
+                  continue
+                fi
+                if [ -n "$pushed" ] && [ "$pushed" != "$one" ]; then
+                  echo "docker push printed more than one digest" >&2
+                  exit 1
+                fi
+                pushed="$one"
+                ;;
             esac
-          done <<< "$digest_lines"
-          if [ -z "$ref" ]; then
-            digest="$(sed -n 's/.*\(sha256:[0-9a-f]\{64\}\).*/\1/p' "$push_log" | head -n 1)"
-            if [ -z "$digest" ]; then
-              echo "docker push did not print a digest" >&2
+          done < "$push_log"
+          if [ -z "$pushed" ]; then
+            echo "docker push did not print a digest" >&2
+            exit 1
+          fi
+          for tag in "${tags[@]}"; do
+            registry="$(IMAGE_REF="${image}:${tag}" python3 scripts/resolve_pricing_digest.py)" || exit 1
+            if [ "$registry" != "$pushed" ]; then
+              echo "registry digest for ${image}:${tag} does not match the digest from docker push (${pushed})" >&2
               exit 1
             fi
-            ref="${image}@${digest}"
-          fi
+          done
+          ref="${image}@${pushed}"
           echo "Pin the running image by that digest. The tag can move; the digest cannot."
           echo "image digest: ${ref}"
           digest="${ref#*@}"

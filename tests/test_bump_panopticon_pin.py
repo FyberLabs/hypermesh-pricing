@@ -11,6 +11,7 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "scripts"))
 
 import bump_panopticon_pin as bump  # noqa: E402
+import resolve_pricing_digest as resolve  # noqa: E402
 
 OLD = "96de4c59dd1bc44743c7f091d4dde860155bde3cb2d63806749b28b1b8f90090"
 NEW = "b" * 64
@@ -166,6 +167,22 @@ def test_title_body_and_branch():
         bump.assert_bump_branch("main")
 
 
+def test_pricing_image_ref_accepts_only_this_images_tags():
+    assert resolve.pricing_image_ref("ghcr.io/fyberlabs/hypermesh-pricing:v1.2.3")
+    assert resolve.pricing_image_ref("ghcr.io/fyberlabs/hypermesh-pricing:v1.2.3-rc.1")
+    assert resolve.pricing_image_ref("ghcr.io/fyberlabs/hypermesh-pricing:main")
+    sha_tag = "sha-" + ("ab" * 32)
+    assert resolve.pricing_image_ref(f"ghcr.io/fyberlabs/hypermesh-pricing:{sha_tag}")
+    for bad in (
+        "ghcr.io/example/other:v1.2.3",
+        "ghcr.io/fyberlabs/hypermesh-pricing:v1.2.3;rm",
+        "ghcr.io/fyberlabs/hypermesh-pricing:sha-abc",
+        "ghcr.io/fyberlabs/hypermesh-pricing:latest",
+    ):
+        with pytest.raises(ValueError):
+            resolve.pricing_image_ref(bad)
+
+
 def test_imagetools_digest_uses_the_top_level_line():
     text = (
         "Name:      ghcr.io/fyberlabs/hypermesh-pricing:v1.2.3\n"
@@ -269,6 +286,9 @@ def test_release_workflow_bumps_on_a_hosted_runner_without_pull_request_secrets(
     assert "PANOPTICON_BUMP_APP_PRIVATE_KEY" not in image
     assert "id: push" in image
     assert 'echo "digest=${digest}" >> "$GITHUB_OUTPUT"' in image
+    assert "RepoDigests" not in release
+    assert 'IMAGE_REF="${image}:${tag}" python3 scripts/resolve_pricing_digest.py' in image
+    assert "does not match the digest from docker push" in image
 
     assert "environment: panopticon-bump" in bump_job
     assert "actions/create-github-app-token@fee1f7d63c2ff003460e3d139729b119787bc349 # v2.2.2" in bump_job
