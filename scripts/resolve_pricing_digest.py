@@ -17,7 +17,8 @@ import sys
 from bump_panopticon_pin import TAG_RE, parse_imagetools_digest, require_tag
 
 IMAGE = "ghcr.io/fyberlabs/hypermesh-pricing"
-_SHA_TAG = re.compile(r"sha-[0-9a-f]{64}")
+# GITHUB_SHA is 40 hex. A full 64-hex id is also a sha- tag.
+_SHA_TAG = re.compile(r"sha-(?:[0-9a-f]{40}|[0-9a-f]{64})")
 
 
 def pricing_image_ref(image_ref: str) -> str:

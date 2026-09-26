@@ -191,6 +191,14 @@ def test_pricing_image_ref_accepts_only_this_images_tags():
             resolve.pricing_image_ref(bad)
 
 
+def test_pricing_image_ref_accepts_github_sha_tag():
+    # 73dddab. GITHUB_SHA is 40 hex, which is what :sha-<commit> uses.
+    github_sha = "sha-73dddab269adc5915e4f860d16cab3c5fa989301"
+    assert len(github_sha.removeprefix("sha-")) == 40
+    image = f"ghcr.io/fyberlabs/hypermesh-pricing:{github_sha}"
+    assert resolve.pricing_image_ref(image) == image
+
+
 def test_imagetools_digest_uses_the_top_level_line():
     text = (
         "Name:      ghcr.io/fyberlabs/hypermesh-pricing:v1.2.3\n"
