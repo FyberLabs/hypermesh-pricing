@@ -303,6 +303,8 @@ def test_release_workflow_bumps_on_a_hosted_runner_without_pull_request_secrets(
     assert "PANOPTICON_BUMP" not in ci
     assert release.count("runs-on:") == release.count("runs-on: ubuntu-latest") == 2
     assert "if: github.event_name == 'push'" in image
+    assert "group: hypermesh-pricing-image-${{ github.ref }}" in image
+    assert "cancel-in-progress: false" in image
     assert "PANOPTICON_BUMP_APP_PRIVATE_KEY" not in image
     assert "id: push" in image
     assert 'echo "digest=${digest}" >> "$GITHUB_OUTPUT"' in image

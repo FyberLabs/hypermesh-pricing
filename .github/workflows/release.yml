@@ -32,6 +32,11 @@ jobs:
   image:
     if: github.event_name == 'push'
     runs-on: ubuntu-latest
+    # Queue pushes of the same ref. A second main push must not retag :main
+    # between this job's docker push and its registry inspect.
+    concurrency:
+      group: hypermesh-pricing-image-${{ github.ref }}
+      cancel-in-progress: false
     permissions:
       contents: read
       packages: write
