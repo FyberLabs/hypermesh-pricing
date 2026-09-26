@@ -154,7 +154,7 @@ Repository permissions, on the `panopticon` repository only:
 
 No other permissions. Install the App on `panopticon` only. Do not install it on this repository. Webhooks can stay off.
 
-In this repository, create a GitHub Environment named `panopticon-bump`. Do not require reviewers on it. The pull request in `panopticon` is the review. A required reviewer would pause the tag push before the pull request exists. On that environment, add one variable and one secret. The App id is not a secret. An organization secret with the private-key name, limited to this repository, is also visible to the job. The environment secret stays off any workflow that does not name `panopticon-bump`.
+In this repository, create a GitHub Environment named `panopticon-bump`. Do not require reviewers on it. The pull request in `panopticon` is the review. A required reviewer would pause the tag push before the pull request exists. Limit that environment's deployment branches and tags to `main` and `v*.*.*`. The bump job then runs for a release tag and for a dispatch from `main`, and a dispatch from another branch cannot read the App private key. On that environment, add one variable and one secret. The App id is not a secret. An organization secret with the private-key name, limited to this repository, is also visible to the job. The environment secret stays off any workflow that does not name `panopticon-bump`.
 
 | Name | Kind | Value |
 |---|---|---|

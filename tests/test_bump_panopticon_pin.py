@@ -293,6 +293,8 @@ def test_release_workflow_bumps_on_a_hosted_runner_without_pull_request_secrets(
     assert "RepoDigests" not in release
     assert 'IMAGE_REF="${image}:${tag}" python3 scripts/resolve_pricing_digest.py' in image
     assert "does not match the digest from docker push" in image
+    assert "from bump_panopticon_pin import require_tag" in image
+    assert "require_tag(os.environ[\"TAG\"])" in image
 
     assert "environment: panopticon-bump" in bump_job
     assert "actions/create-github-app-token@fee1f7d63c2ff003460e3d139729b119787bc349 # v2.2.2" in bump_job
@@ -327,5 +329,6 @@ def test_release_workflow_bumps_on_a_hosted_runner_without_pull_request_secrets(
         "docker-compose.vm.yaml",
         "dry_run",
         "chore(pricing): bump hypermesh-pricing to vX.Y.Z",
+        "v*.*.*",
     ):
         assert phrase in readme

@@ -54,6 +54,9 @@ jobs:
         run: |
           set -euo pipefail
           image="ghcr.io/fyberlabs/hypermesh-pricing"
+          if [ "${GITHUB_REF_TYPE}" = "tag" ]; then
+            TAG="${GITHUB_REF_NAME}" python3 -c 'import os, sys; sys.path.insert(0, "scripts"); from bump_panopticon_pin import require_tag; require_tag(os.environ["TAG"])'
+          fi
           tags=()
           if [ "${GITHUB_REF_TYPE}" = "tag" ]; then
             tags+=("${GITHUB_REF_NAME}")
