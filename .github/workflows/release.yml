@@ -2,11 +2,14 @@ name: release
 
 on:
   push:
+    branches:
+      - main
     tags:
       - "v*"
 
-# Cut the tag after merge. This workflow only publishes the image.
 # Public repository. GitHub-hosted runners. There is no deploy job.
+# A push to main publishes :main and :sha-<commit>.
+# A v* tag publishes that tag. The job prints the image digest.
 permissions:
   contents: read
   packages: write
@@ -16,23 +19,80 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+      - name: Build image
+        run: docker build -t hypermesh-pricing:candidate .
+      - name: Check startup and /healthz
+        run: bash scripts/smoke-image.sh hypermesh-pricing:candidate
       - name: Log in to GHCR
         uses: docker/login-action@v3
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
-      - name: Build and push
+      - name: Push image and print digest
         run: |
           set -euo pipefail
-          image="ghcr.io/fyberlabs/hypermesh-pricing:${GITHUB_REF_NAME}"
-          docker build -t "$image" .
-          push_out="$(docker push "$image")"
-          printf '%s\n' "$push_out"
-          digest="$(printf '%s\n' "$push_out" | awk '/digest: / { print $3; exit }')"
-          if [ -z "$digest" ]; then
-            echo "docker push did not print a digest" >&2
+          image="ghcr.io/fyberlabs/hypermesh-pricing"
+          tags=()
+          if [ "${GITHUB_REF_TYPE}" = "tag" ]; then
+            tags+=("${GITHUB_REF_NAME}")
+          fi
+          if [ "${GITHUB_REF}" = "refs/heads/main" ]; then
+            tags+=("main")
+            tags+=("sha-${GITHUB_SHA}")
+          fi
+          if [ "${#tags[@]}" -eq 0 ]; then
+            echo "no image tags for ${GITHUB_REF}" >&2
             exit 1
           fi
-          echo "image digest: ghcr.io/fyberlabs/hypermesh-pricing@${digest}"
+          push_log="$(mktemp)"
+          trap 'rm -f "$push_log"' EXIT
+          for tag in "${tags[@]}"; do
+            docker tag hypermesh-pricing:candidate "${image}:${tag}"
+            docker push "${image}:${tag}" | tee -a "$push_log"
+          done
+          prefix="${image}@sha256:"
+          ref=""
+          digest_lines="$(docker inspect --format='{{range .RepoDigests}}{{println .}}{{end}}' "${image}:${tags[0]}")"
+          while IFS= read -r line; do
+            case "$line" in
+              "${prefix}"[0-9a-f]*) ref="$line"; break ;;
+            esac
+          done <<< "$digest_lines"
+          if [ -z "$ref" ]; then
+            digest="$(sed -n 's/.*\(sha256:[0-9a-f]\{64\}\).*/\1/p' "$push_log" | head -n 1)"
+            if [ -z "$digest" ]; then
+              echo "docker push did not print a digest" >&2
+              exit 1
+            fi
+            ref="${image}@${digest}"
+          fi
           echo "Pin the running image by that digest. The tag can move; the digest cannot."
+          echo "image digest: ${ref}"
+          if [ -n "${GITHUB_STEP_SUMMARY:-}" ]; then
+            printf '%s\n' "image digest: ${ref}" >> "${GITHUB_STEP_SUMMARY}"
+          fi
+      - name: Set package visibility to public
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          # GITHUB_TOKEN usually cannot PATCH org package visibility. A miss
+          # must not fail the release: the image is already pushed. Do not
+          # write the step summary here; the digest line above stays last.
+          path="/orgs/${GITHUB_REPOSITORY_OWNER}/packages/container/hypermesh-pricing"
+          set +e
+          body="$(gh api --method PATCH \
+            -H "Accept: application/vnd.github+json" \
+            "$path" \
+            -f visibility=public 2>&1)"
+          status=$?
+          set -e
+          if [ "$status" -eq 0 ]; then
+            echo "package visibility: public"
+            exit 0
+          fi
+          echo "WARNING: could not set the GHCR package visibility to public. The image was already pushed." >&2
+          echo "WARNING: one-time fix: set the package public in the org package settings, or link it to the repo." >&2
+          printf '%s\n' "$body" >&2
+          exit 0

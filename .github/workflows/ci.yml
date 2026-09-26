@@ -25,3 +25,5 @@ jobs:
       - uses: actions/checkout@v4
       - name: Build image
         run: docker build -t hypermesh-pricing:ci .
+      - name: Check startup and /healthz
+        run: bash scripts/smoke-image.sh hypermesh-pricing:ci
