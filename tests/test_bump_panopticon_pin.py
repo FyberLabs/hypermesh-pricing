@@ -272,7 +272,8 @@ def test_release_workflow_bumps_on_a_hosted_runner_without_pull_request_secrets(
 
     assert "environment: panopticon-bump" in bump_job
     assert "actions/create-github-app-token@v2" in bump_job
-    assert "secrets.PANOPTICON_BUMP_APP_ID" in bump_job
+    assert "vars.PANOPTICON_BUMP_APP_ID" in bump_job
+    assert "secrets.PANOPTICON_BUMP_APP_ID" not in release
     assert "secrets.PANOPTICON_BUMP_APP_PRIVATE_KEY" in bump_job
     assert "permission-contents: write" in bump_job
     assert "permission-pull-requests: write" in bump_job
@@ -293,6 +294,8 @@ def test_release_workflow_bumps_on_a_hosted_runner_without_pull_request_secrets(
         "panopticon-bump",
         "PANOPTICON_BUMP_APP_ID",
         "PANOPTICON_BUMP_APP_PRIVATE_KEY",
+        "vars.PANOPTICON_BUMP_APP_ID",
+        "secrets.PANOPTICON_BUMP_APP_PRIVATE_KEY",
         "contents:write",
         "pull-requests:write",
         "actions/create-github-app-token",

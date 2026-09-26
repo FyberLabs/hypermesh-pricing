@@ -123,7 +123,8 @@ jobs:
           exit 0
 
   # One pull request in panopticon. Not a deploy.
-  # The App private key is an environment secret. actions/create-github-app-token
+  # The App id is the panopticon-bump environment variable PANOPTICON_BUMP_APP_ID.
+  # The App private key is that environment's secret. actions/create-github-app-token
   # mints the App JWT in this job only. GITHUB_TOKEN is not used to write panopticon.
   bump-panopticon:
     needs: image
@@ -152,7 +153,7 @@ jobs:
         id: app-token
         uses: actions/create-github-app-token@v2
         with:
-          app-id: ${{ secrets.PANOPTICON_BUMP_APP_ID }}
+          app-id: ${{ vars.PANOPTICON_BUMP_APP_ID }}
           private-key: ${{ secrets.PANOPTICON_BUMP_APP_PRIVATE_KEY }}
           owner: ${{ github.repository_owner }}
           repositories: panopticon

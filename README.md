@@ -154,16 +154,16 @@ Repository permissions, on the `panopticon` repository only:
 
 No other permissions. Install the App on `panopticon` only. Do not install it on this repository. Webhooks can stay off.
 
-In this repository, create a GitHub Environment named `panopticon-bump`. Do not require reviewers on it. The pull request in `panopticon` is the review. A required reviewer would pause the tag push before the pull request exists. Add these secrets on that environment. Organization secrets with the same names, limited to this repository, are also visible to the job. Environment secrets are the ones that stay off any workflow that does not name `panopticon-bump`.
+In this repository, create a GitHub Environment named `panopticon-bump`. Do not require reviewers on it. The pull request in `panopticon` is the review. A required reviewer would pause the tag push before the pull request exists. On that environment, add one variable and one secret. The App id is not a secret. An organization secret with the private-key name, limited to this repository, is also visible to the job. The environment secret stays off any workflow that does not name `panopticon-bump`.
 
-| Secret | Value |
-|---|---|
-| `PANOPTICON_BUMP_APP_ID` | The App's numeric ID |
-| `PANOPTICON_BUMP_APP_PRIVATE_KEY` | The App's PEM private key. A multiline paste is fine. |
+| Name | Kind | Value |
+|---|---|---|
+| `PANOPTICON_BUMP_APP_ID` | Environment variable | The App's numeric ID |
+| `PANOPTICON_BUMP_APP_PRIVATE_KEY` | Environment secret | The App's PEM private key. A multiline paste is fine. |
 
-Keep the PEM in Key Vault if that is where App keys live, and copy it into the environment secret. The workflow does not read Key Vault. `actions/create-github-app-token` mints the App JWT only inside the `bump-panopticon` job, which is the job bound to that environment. Do not put these secrets in a workflow that runs on `pull_request`.
+The workflow reads them as `vars.PANOPTICON_BUMP_APP_ID` and `secrets.PANOPTICON_BUMP_APP_PRIVATE_KEY`. Keep the PEM in Key Vault if that is where App keys live, and copy it into the environment secret. The workflow does not read Key Vault. `actions/create-github-app-token` mints the App JWT only inside the `bump-panopticon` job, which is the job bound to that environment. Do not put the private key in a workflow that runs on `pull_request`.
 
-Until the environment and both secrets exist, a `vX.Y.Z` tag still publishes the image. The bump job fails, and the workflow ends red, so the missing setup is visible. The digest line in the image job log is unchanged.
+Until the environment, the variable, and the secret exist, a `vX.Y.Z` tag still publishes the image. The bump job fails, and the workflow ends red, so the missing setup is visible. The digest line in the image job log is unchanged.
 
 ## Run
 
