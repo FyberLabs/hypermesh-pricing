@@ -280,6 +280,10 @@ def test_release_workflow_bumps_on_a_hosted_runner_without_pull_request_secrets(
     assert "workflow_dispatch:" in header
     assert "dry_run:" in header
     assert "pull_request" not in header
+    assert "packages: write" not in header
+    assert release.count("packages: write") == 1
+    assert "packages: write" in image
+    assert "packages: write" not in bump_job
     assert "PANOPTICON_BUMP" not in ci
     assert release.count("runs-on:") == release.count("runs-on: ubuntu-latest") == 2
     assert "if: github.event_name == 'push'" in image
