@@ -6,17 +6,35 @@ on:
       - main
     tags:
       - "v*"
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Existing image tag to pin (vX.Y.Z)"
+        required: true
+        type: string
+      dry_run:
+        description: "Print the digest and compose diff and do not open a pull request"
+        required: false
+        type: boolean
+        default: false
 
 # Public repository. GitHub-hosted runners. There is no deploy job.
 # A push to main publishes :main and :sha-<commit>.
-# A v* tag publishes that tag. The job prints the image digest.
+# A v* tag publishes that tag. The bump job then resolves that digest and
+# opens or updates one pull request in the panopticon repository.
+# workflow_dispatch pins an image that is already in GHCR. dry_run stops
+# before any pull request. The bump job reads its App key only from the
+# panopticon-bump environment. It does not run for a pull request.
 permissions:
   contents: read
   packages: write
 
 jobs:
   image:
+    if: github.event_name == 'push'
     runs-on: ubuntu-latest
+    outputs:
+      digest: ${{ steps.push.outputs.digest }}
     steps:
       - uses: actions/checkout@v4
       - name: Build image
@@ -30,6 +48,7 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
       - name: Push image and print digest
+        id: push
         run: |
           set -euo pipefail
           image="ghcr.io/fyberlabs/hypermesh-pricing"
@@ -69,6 +88,12 @@ jobs:
           fi
           echo "Pin the running image by that digest. The tag can move; the digest cannot."
           echo "image digest: ${ref}"
+          digest="${ref#*@}"
+          if [[ ! "$digest" =~ ^sha256:[0-9a-f]{64}$ ]]; then
+            echo "ref is not a digest pin" >&2
+            exit 1
+          fi
+          echo "digest=${digest}" >> "$GITHUB_OUTPUT"
           if [ -n "${GITHUB_STEP_SUMMARY:-}" ]; then
             printf '%s\n' "image digest: ${ref}" >> "${GITHUB_STEP_SUMMARY}"
           fi
@@ -96,3 +121,63 @@ jobs:
           echo "WARNING: one-time fix: set the package public in the org package settings, or link it to the repo." >&2
           printf '%s\n' "$body" >&2
           exit 0
+
+  # One pull request in panopticon. Not a deploy.
+  # The App private key is an environment secret. actions/create-github-app-token
+  # mints the App JWT in this job only. GITHUB_TOKEN is not used to write panopticon.
+  bump-panopticon:
+    needs: image
+    if: >-
+      always() &&
+      (needs.image.result == 'success' || needs.image.result == 'skipped') &&
+      github.event_name != 'pull_request' &&
+      github.event_name != 'pull_request_target' &&
+      (
+        (github.event_name == 'push' && github.ref_type == 'tag') ||
+        github.event_name == 'workflow_dispatch'
+      )
+    runs-on: ubuntu-latest
+    environment: panopticon-bump
+    concurrency:
+      group: panopticon-pin-${{ github.event_name == 'workflow_dispatch' && inputs.tag || github.ref_name }}
+      cancel-in-progress: false
+    permissions:
+      contents: read
+      packages: read
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Create GitHub App token
+        id: app-token
+        uses: actions/create-github-app-token@v2
+        with:
+          app-id: ${{ secrets.PANOPTICON_BUMP_APP_ID }}
+          private-key: ${{ secrets.PANOPTICON_BUMP_APP_PRIVATE_KEY }}
+          owner: ${{ github.repository_owner }}
+          repositories: panopticon
+          permission-contents: write
+          permission-pull-requests: write
+      - name: Log in to GHCR
+        if: github.event_name == 'workflow_dispatch'
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Resolve dispatched tag digest
+        if: github.event_name == 'workflow_dispatch'
+        id: dispatched
+        env:
+          TAG: ${{ inputs.tag }}
+        run: python3 scripts/resolve_pricing_digest.py
+      - name: Open or update the panopticon pin pull request
+        env:
+          GH_TOKEN: ${{ steps.app-token.outputs.token }}
+          PANOPTICON_OWNER: ${{ github.repository_owner }}
+          PANOPTICON_REPO: panopticon
+          PRICING_REPOSITORY: ${{ github.repository }}
+          PRICING_TAG: ${{ github.event_name == 'workflow_dispatch' && inputs.tag || github.ref_name }}
+          PRICING_DIGEST: ${{ github.event_name == 'workflow_dispatch' && steps.dispatched.outputs.digest || needs.image.outputs.digest }}
+          DRY_RUN: ${{ github.event_name == 'workflow_dispatch' && inputs.dry_run || 'false' }}
+        run: python3 scripts/bump_panopticon_pin.py

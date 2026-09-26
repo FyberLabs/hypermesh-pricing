@@ -38,8 +38,8 @@ def test_ci_uses_github_hosted_runners_and_does_not_deploy():
     assert "deploy:" not in workflow
     assert "scripts/smoke-image.sh" in workflow
     release = (ROOT / ".github" / "workflows" / "release.yml").read_text(encoding="utf-8")
-    assert release.count("runs-on: ubuntu-latest") == 1
-    assert release.count("runs-on:") == 1
+    assert release.count("runs-on: ubuntu-latest") == 2
+    assert release.count("runs-on:") == 2
     assert "deploy:" not in release
     assert "packages: write" in release
     assert "refs/heads/main" in release
