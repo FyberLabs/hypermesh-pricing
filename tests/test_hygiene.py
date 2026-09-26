@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import re
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -62,3 +63,28 @@ def test_ci_uses_github_hosted_runners_and_does_not_deploy():
     assert "EXPOSE 8080" in dockerfile
     assert 'ENTRYPOINT ["python", "-m", "pricing_service"]' in dockerfile
     assert "/healthz" in dockerfile
+
+
+def test_workflow_actions_are_pinned_to_full_shas():
+    """Every workflow uses: is a 40-hex commit with a version comment."""
+    uses_re = re.compile(r"(?m)^[ \t]*(?:-[ \t]*)?uses:[ \t]*([^ \t#]+)")
+    pinned = re.compile(r"^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+@[0-9a-f]{40}$")
+    version_comment = re.compile(r"#[ \t]*v[0-9]")
+    offenders: list[str] = []
+    workflows = sorted((ROOT / ".github" / "workflows").glob("*.yml"))
+    assert workflows
+    for path in workflows:
+        text = path.read_text(encoding="utf-8")
+        found = False
+        for match in uses_re.finditer(text):
+            found = True
+            ref = match.group(1).strip().strip("'\"")
+            line_end = text.find("\n", match.end())
+            line = text[match.start(): len(text) if line_end < 0 else line_end]
+            if not pinned.fullmatch(ref):
+                offenders.append(f"{path.relative_to(ROOT)}: {ref}")
+            elif not version_comment.search(line):
+                offenders.append(f"{path.relative_to(ROOT)}: {ref} missing version comment")
+        if not found:
+            offenders.append(f"{path.relative_to(ROOT)}: no uses")
+    assert offenders == []
