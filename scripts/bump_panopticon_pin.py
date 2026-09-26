@@ -74,15 +74,29 @@ def digest_current(text: str, digest: str) -> bool:
     return bool(pins) and all(pin == target for pin in pins)
 
 
+_SERVICE_KEY = re.compile(r"^[ \t]*hypermesh-pricing:[ \t]*$")
+
+
 def rewrite_comments(text: str, tag: str) -> str:
-    """Update the pricing version note on the two known comment lines."""
-    lines: list[str] = []
-    for line in text.splitlines(keepends=True):
-        body = line.lstrip()
-        if body.startswith("#") and ("digest pin" in line or "ghcr-test.yml" in line):
+    """Update version notes in the comment block directly above hypermesh-pricing."""
+    lines = text.splitlines(keepends=True)
+    chosen: set[int] = set()
+    for index, line in enumerate(lines):
+        if _SERVICE_KEY.fullmatch(line.rstrip("\r\n")) is None:
+            continue
+        cursor = index - 1
+        while cursor >= 0:
+            body = lines[cursor].rstrip("\r\n")
+            if not body.strip() or not body.lstrip().startswith("#"):
+                break
+            chosen.add(cursor)
+            cursor -= 1
+    rewritten: list[str] = []
+    for index, line in enumerate(lines):
+        if index in chosen and ("digest pin" in line or "ghcr-test.yml" in line):
             line = VERSION_IN_TEXT.sub(tag, line, count=1)
-        lines.append(line)
-    return "".join(lines)
+        rewritten.append(line)
+    return "".join(rewritten)
 
 
 def rewrite(text: str, digest: str, tag: str) -> str:

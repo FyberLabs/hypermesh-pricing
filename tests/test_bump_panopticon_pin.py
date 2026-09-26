@@ -131,6 +131,14 @@ def test_rewrite_replaces_only_the_pricing_pin_and_version_comments():
     assert bump.rewrite(updated, f"sha256:{NEW}", TAG) == updated
 
 
+def test_unrelated_digest_pin_comment_is_left_alone():
+    text = "# openapi-generator v7.10.0 digest pin\nservices:\n" + LAPTOP
+    updated = bump.rewrite(text, f"sha256:{NEW}", TAG)
+    assert "# openapi-generator v7.10.0 digest pin\n" in updated
+    assert "# v1.2.3 digest pin, not a moving tag." in updated
+    assert f"hypermesh-pricing@sha256:{NEW}" in updated
+
+
 def test_prerelease_comment_is_stable():
     once = bump.rewrite(VM, f"sha256:{NEW}", "v1.2.3-rc.1")
     twice = bump.rewrite(once, f"sha256:{NEW}", "v1.2.3-rc.1")
