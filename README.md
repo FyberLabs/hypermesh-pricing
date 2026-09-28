@@ -1,6 +1,6 @@
 # Hypermesh pricing
 
-Stateless pricing engine for Hypermesh, version 0.1.1. It is the internal HTTP service Panopticon calls. It is versioned on its own and published as a container image. This repository does not change Panopticon, Stripe, or a database.
+Stateless pricing engine for Hypermesh, version 0.1.1. It is the internal HTTP service Panopticon calls. It is versioned on its own and published as a container image. This repository does not change Stripe or a database. Publishing a `vX.Y.Z` tag opens a pull request that pins the new image digest in the panopticon compose files.
 
 The clearing rules follow the 2026-09-25 pricing memos. The pure functions follow the private market-sim reference (`floor.py`, `controller.py`, `orders.py`, `clearing.py`, `token_pricing.py`). Every tuning value shipped in `pricing_core/rulesets/` is a **simulated default** from that reference (seed 5547). None of it is a measured price, utilization, or revenue.
 
@@ -110,7 +110,7 @@ A degraded round still uses integer cents and still ceilings the reserve. It doe
 - A new ruleset takes effect only at a round boundary, and not before its `effective_from`. Panopticon must not resubmit a cleared `round_id` under a different ruleset. This service cannot see that history; it will happily price whatever it is sent, and the same inputs (including an explicit `ruleset_version`) always produce the same price.
 - A published ruleset file does not change. `tests/test_ruleset.py` pins the sha256 of `pricing_core/rulesets/2026-09-25.1.json` and of `2026-09-25.2.json`. A tuning change is a new file, added to `PUBLISHED_VERSIONS`. `2026-09-25.2` adds `market.lock_hours_max` (24). It does not edit `.1`.
 - `engine_version` is the package version (`0.1.1`). It moves when the code moves, even if the ruleset does not.
-- The `v0.1.1` git tag is cut after this release is merged. Pushing that tag publishes the image. Do not point production at a moving tag. Pin the digest the release workflow prints.
+- The `v0.1.1` git tag is cut after this release is merged. Pushing that tag publishes the image. Do not point production at a moving tag. The release workflow prints the digest and opens a pull request that pins it.
 
 ## Images
 
@@ -127,9 +127,43 @@ The job prints the image digest. Pin the running image by digest:
 ghcr.io/fyberlabs/hypermesh-pricing@sha256:<digest>
 ```
 
-The tag can be moved. The digest cannot. There is no deploy job in this repository. Panopticon pulls the pinned image and runs it.
+The tag can be moved. The digest cannot. There is no deploy job in this repository. Panopticon pulls the pinned image and runs it. The bump job in the release workflow opens the pull request that updates those pins. It does not push to panopticon's default branch.
 
 A new GHCR package is private until its visibility is set. The release job tries to mark it public and continues if that call fails. `GITHUB_TOKEN` usually cannot change org package visibility. The one-time fix is to set the package public in the organization package settings, or link the package to this repository. The image does not contain `PRICING_SERVICE_TOKEN`.
+
+## Pin pull request
+
+Publishing a `vX.Y.Z` tag runs `.github/workflows/release.yml` on a GitHub-hosted `ubuntu-latest` runner. The image job builds, pushes, and resolves the digest. The `bump-panopticon` job then opens or updates one pull request in the `panopticon` repository (the same GitHub organization as this repository).
+
+The pull request title is `chore(pricing): bump hypermesh-pricing to vX.Y.Z`. The body links to this repository's release notes at `/releases/tag/vX.Y.Z`. The job sets the digest on `hypermesh-pricing` in `docker-compose.yaml` and `docker-compose.vm.yaml`, inside `HYPERMESH_PRICING_IMAGE`. When a version comment on those pin lines names a release, the job updates that comment too. It does not push to panopticon's default branch. Both files must already contain a `ghcr.io/fyberlabs/hypermesh-pricing@sha256:` pin of 64 hex characters. If either pin is missing, the job fails and does not invent one.
+
+If both files already pin that digest, the job does not open a pull request. A later run for the same tag updates the open pull request on branch `chore/pricing-pin-vX.Y.Z` instead of opening a second one. Those branches should stay unprotected so the job can reset them onto the current default branch.
+
+The workflow does not run on `pull_request`. The image job does not run for `workflow_dispatch`, so a manual run does not move an existing tag. Dispatch looks up the tag that is already in GHCR.
+
+To pin an existing tag, open Actions, choose the release workflow, and run it. Set `tag` to `vX.Y.Z`. Check `dry_run` to print the digest and the compose diff and stop before any pull request. `dry_run` still reads panopticon, so the App secrets below have to exist. It does not create or update a branch or a pull request.
+
+### One-time setup
+
+Chris creates a GitHub App named `hypermesh-pricing-bump`, owned by the organization. It is not a personal access token, and it is not a user-owned app.
+
+Repository permissions, on the `panopticon` repository only:
+
+- Contents: Read and write (`contents:write`)
+- Pull requests: Read and write (`pull-requests:write`)
+
+No other permissions. Install the App on `panopticon` only. Do not install it on this repository. Webhooks can stay off.
+
+In this repository, create a GitHub Environment named `panopticon-bump`. Do not require reviewers on it. The pull request in `panopticon` is the review. A required reviewer would pause the tag push before the pull request exists. Limit that environment's deployment branches and tags to `main` and `v*.*.*`. The bump job then runs for a release tag and for a dispatch from `main`, and a dispatch from another branch cannot read the App private key. On that environment, add one variable and one secret. The App id is not a secret. An organization secret with the private-key name, limited to this repository, is also visible to the job. The environment secret stays off any workflow that does not name `panopticon-bump`.
+
+| Name | Kind | Value |
+|---|---|---|
+| `PANOPTICON_BUMP_APP_ID` | Environment variable | The App's numeric ID |
+| `PANOPTICON_BUMP_APP_PRIVATE_KEY` | Environment secret | The App's PEM private key. A multiline paste is fine. |
+
+The workflow reads them as `vars.PANOPTICON_BUMP_APP_ID` and `secrets.PANOPTICON_BUMP_APP_PRIVATE_KEY`. Keep the PEM in Key Vault if that is where App keys live, and copy it into the environment secret. The workflow does not read Key Vault. `actions/create-github-app-token` mints the App JWT only inside the `bump-panopticon` job, which is the job bound to that environment. Do not put the private key in a workflow that runs on `pull_request`.
+
+Until the environment, the variable, and the secret exist, a `vX.Y.Z` tag still publishes the image. The bump job fails, and the workflow ends red, so the missing setup is visible. The digest line in the image job log is unchanged.
 
 ## Run
 
@@ -162,7 +196,7 @@ curl -fsS http://127.0.0.1:8080/healthz
 
 Omitting `PRICING_SERVICE_TOKEN` makes that `docker run` exit before it binds to port 8080.
 
-Panopticon runs the published image as an internal compose service and pins the digest:
+Panopticon runs the published image as an internal compose service and pins the digest. The bump job writes that digest into `docker-compose.yaml` and `docker-compose.vm.yaml`:
 
 ```yaml
 services:
