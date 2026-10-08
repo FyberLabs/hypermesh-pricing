@@ -145,7 +145,7 @@ To pin an existing tag, open Actions, choose the release workflow, and run it. S
 
 ### One-time setup
 
-Chris creates a GitHub App named `hypermesh-pricing-bump`, owned by the organization. It is not a personal access token, and it is not a user-owned app.
+An organization admin creates a GitHub App named `hypermesh-pricing-bump`, owned by the organization. It is not a personal access token, and it is not a user-owned app.
 
 Repository permissions, on the `panopticon` repository only:
 
